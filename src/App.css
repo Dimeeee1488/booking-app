@@ -1,0 +1,1712 @@
+/* reset vite starter demo styles */
+#root { max-width: 100vw; margin: 0; padding: 0 0 80px 0; text-align: left; }
+
+/* Icon sizes to prevent huge SVGs */
+.search-field-icon{width:20px;height:20px;flex:0 0 20px;display:inline-block}
+.bottom-nav-icon{width:24px;height:24px;flex:0 0 24px;display:inline-block}
+.nav-tab-icon{
+  width:24px;
+  height:24px;
+  flex:0 0 24px;
+  display:inline-block;
+}
+.notification-icon{width:24px;height:24px;flex:0 0 24px;display:inline-block}
+
+/* Hotel autocomplete suggestions */
+.hotel-suggestions {
+  background: #1f1f1f;
+  border: 1px solid #333;
+  border-radius: 8px;
+  margin-top: -8px;
+  max-height: 200px;
+  overflow-y: auto;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.hotel-suggestion-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  color: white;
+  border-bottom: 1px solid #333;
+  transition: background-color 0.2s ease;
+}
+
+.hotel-suggestion-item:hover {
+  background-color: #2a2a2a;
+}
+
+.hotel-suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.hotel-suggestion-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.hotel-suggestion-name {
+  font-weight: 500;
+  font-size: 14px;
+  color: white;
+}
+
+.hotel-suggestion-location {
+  color: #aaa;
+  font-size: 12px;
+}
+
+.hotel-suggestion-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.hotel-count {
+  color: #0071c2;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.hotel-type {
+  color: #666;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+/* Home layout (mobile-first) */
+.header{display:flex;align-items:center;justify-content:center;padding:16px 20px;position:relative}
+.header h1{
+  margin:0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.nav-tabs{
+  display:grid;
+  grid-template-columns:1fr 1fr; /* back to compact tabs */
+  gap:12px;
+  padding:12px 16px;
+  justify-content:center;
+  z-index:100;
+  position: sticky;
+  top: 0;
+  background: transparent;
+  transition: background-color 0.2s ease, gap 0.15s ease;
+  border-bottom: 1px solid transparent;
+  touch-action: pan-y;
+  height: 140px;
+  align-content: start;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.nav-tabs::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: transparent;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.nav-tabs .nav-tab:nth-child(3){grid-column:1 / -1}
+
+/* Compact navigation when scrolled */
+.nav-tabs-compact {
+  padding: 8px 16px 12px;
+  gap: 8px;
+  grid-template-columns: repeat(3, 1fr) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.nav-tabs-compact .nav-tab:nth-child(3) {
+  grid-column: auto !important;
+}
+
+.nav-tabs-compact::before {
+  background: transparent;
+  box-shadow: none;
+}
+
+.nav-tabs-compact .nav-tab {
+  padding: 12px 16px;
+  font-size: 14px;
+  flex-direction: row;
+  gap: 8px;
+  min-height: 56px;
+  justify-content: center;
+}
+
+.nav-tab{
+  background:#2a2a2a !important;
+  border:1px solid #3a3a3a !important;
+  border-radius:12px;
+  padding:12px 16px;
+  color:#ddd !important;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, flex-direction 0.2s ease, gap 0.2s ease, font-size 0.2s ease;
+  cursor:pointer;
+  position:relative;
+  overflow:hidden;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  outline: none !important;
+  box-shadow: none !important;
+  min-height: 56px;
+  width: 100%;
+}
+
+.nav-tab:focus,
+.nav-tab:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border: 1px solid #3a3a3a !important;
+}
+.nav-tab:hover {
+  background:#323232 !important;
+  border:1px solid #4a4a4a !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+@keyframes iconBounce {
+  0% {
+    transform: scale(1) translateY(0);
+  }
+  40% {
+    transform: scale(1.2) translateY(-6px);
+  }
+  60% {
+    transform: scale(0.95) translateY(-2px);
+  }
+  80% {
+    transform: scale(1.05) translateY(-4px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Пульсация иконки в активной вкладке */
+.nav-tab.active .nav-tab-icon {
+  color: #fff !important;
+}
+
+@keyframes iconPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.05);
+  }
+}
+
+/* Вращение иконки при клике */
+.nav-tab:active .nav-tab-icon {
+  transform: rotate(10deg) scale(0.95);
+}
+
+.nav-tab.active{
+  border: 2px solid #fff !important;
+  background: #333 !important;
+  color: #fff !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.nav-tab.active:focus,
+.nav-tab.active:focus-visible {
+  border: 2px solid #fff !important;
+  background: #333 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+@keyframes tabActivate {
+  0% {
+    transform: scale(0.95);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.nav-tab:hover{
+  transform:translateY(-2px);
+  border-color:#5a5a5a;
+  box-shadow:0 8px 20px rgba(0,0,0,0.3);
+}
+
+.nav-tab.active:hover{
+  border: 2px solid #fff !important;
+  background: #3a3a3a !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Компактный режим - убираем трансформацию при hover */
+.nav-tabs-compact .nav-tab:hover {
+  transform: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* В компактном режиме - мягкая анимация иконки */
+.nav-tabs-compact .nav-tab:hover .nav-tab-icon {
+  transform: scale(1.1) translateY(-2px);
+  filter: drop-shadow(0 2px 4px rgba(0, 113, 194, 0.3));
+}
+
+/* Компактный режим - уменьшаем пульсацию активной иконки */
+.nav-tabs-compact .nav-tab.active .nav-tab-icon {
+  color: #fff;
+}
+
+@keyframes iconPulseSmall {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.03);
+  }
+}
+
+/* Hero */
+.home-hero {
+  max-width: 560px;
+  margin: 8px auto 12px;
+  text-align: center;
+  color: #ccc;
+  padding: 0 12px;
+}
+
+.hero-title {
+  margin: 0 0 6px;
+  font-weight: 700;
+  font-size: 22px;
+  color: #fff;
+  word-spacing: normal;
+  letter-spacing: normal;
+}
+
+.hero-sub {
+  margin: 0;
+  font-size: 14px;
+  color: #aaa;
+  word-spacing: normal;
+  letter-spacing: normal;
+}
+
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+.search-container{width:min(92vw,1100px);max-width:1100px;margin:0 auto;padding:12px;scroll-margin-top:60px}
+.search-field{position:relative;display:flex;align-items:center;gap:12px;background:#2a2a2a;border:1px solid #3a3a3a;border-radius:12px;padding:14px 16px}
+.search-field+.search-field{margin-top:10px}
+.search-field .search-field-content{flex:1;min-width:0}
+/* On wide screens, inputs grow nicely */
+@media (min-width: 1024px){
+  .search-card{padding:16px}
+  .search-field{padding:16px 18px}
+  .route-block{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .route-block .search-field{grid-column:span 1}
+}
+.search-button{width:100%;height:52px;background:#0071c2;color:#fff;border:none;border-radius:12px;margin-top:12px;font-weight:700}
+.inline-error{color:#ff6b6b;background:rgba(255,107,107,0.08);border:1px solid rgba(255,107,107,0.3);padding:10px 12px;border-radius:10px;margin:10px 0 0 0;font-weight:700}
+.direct-flights-toggle{max-width:560px;margin:12px auto;padding:0 12px;display:flex;align-items:center;justify-content:space-between}
+.bottom-nav{position:fixed;left:0;right:0;bottom:0;background:#1a1a1a;border-top:1px solid #333;display:flex;justify-content:space-around;padding:10px 0;z-index:100}
+.bottom-nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#bbb;cursor:pointer;transition:color 0.2s ease;-webkit-tap-highlight-color:transparent}
+.bottom-nav-item:hover{color:#ddd}
+.bottom-nav-item.active{color:#5B9BD5}
+.bottom-nav-item:active{transform:scale(0.95)}
+.bottom-nav-label{font-size:12px}
+
+/* Search card */
+.search-card{border:2px solid #f4b400;border-radius:14px;padding:12px;background:#1f1f1f;position:relative}
+.route-block{position:relative}
+.route-block .search-field{background:transparent}
+.leg-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.ghost-link{background:#2e2e2e;border:1px solid #505050;color:#ddd;border-radius:10px;padding:8px 12px;font-weight:600}
+
+/* Multi-city specific styles */
+.multi-city-container {
+  margin-top: 8px;
+}
+
+.multi-flight-block {
+  background: transparent;
+  margin-bottom: 0;
+  padding: 0 0 12px 0;
+  position: relative; /* Для абсолютного позиционирования кнопки удаления */
+}
+
+.multi-flight-block:not(:last-child) {
+  border-bottom: 2px solid #f4b400;
+  margin-left: -12px;  /* ПОЛОСКА УЙДЕТ ВЛЕВО НА 20px БОЛЬШЕ */
+  margin-right: -12px; /* ПОЛОСКА УЙДЕТ ВПРАВО НА 20px БОЛЬШЕ */
+  padding-left: 12px;  /* ВЕРНЕМ ОТСТУП ДЛЯ КОНТЕНТА */
+  padding-right: 12px; /* ВЕРНЕМ ОТСТУП ДЛЯ КОНТЕНТА */
+}
+
+.add-flight-section {
+  background: #2a2a2a;
+  border: none; /* УБИРАЕМ ВСЕ ПОЛОСКИ */
+  border-bottom: 2px solid #f4b400; /* ОСТАВЛЯЕМ ТОЛЬКО НИЖНЮЮ ПОЛОСКУ */
+  border-radius: 0px;
+  padding: 16px;
+  margin: 8px 0;
+  margin-left: -12px;
+  margin-right: -12px;
+  padding-left: 28px;  /* ВЕРНЕМ ОТСТУП ДЛЯ КОНТЕНТА */
+  padding-right: 28px; /* ВЕРНЕМ ОТСТУП ДЛЯ КОНТЕНТА */
+  text-align: center;
+}
+
+.add-flight-button {
+  background: transparent;
+  color: #0071c2;
+  border: none;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.add-flight-button:hover {
+  opacity: 0.8;
+}
+
+
+
+/* Полоска ПЕРЕД кнопкой Add a flight убирается - этот класс не используется */
+.flight-separator.before-add-button {
+  display: none;
+}
+
+.remove-flight-btn {
+  background: transparent;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.remove-flight-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.remove-flight-container {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: flex-end;
+  z-index: 10;
+}
+
+.add-flight-top-line {
+  height: 1px;
+  background: #f4b400;
+  margin-bottom: 12px;
+}
+
+.multi-leg {
+  margin-bottom: 24px;
+  position: relative;
+}
+
+.leg-number {
+  color: #ccc;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  padding-left: 4px;
+}
+
+.multi-field {
+  background: transparent !important;
+  border: none !important;
+  margin: 0 !important;
+  padding: 12px 0;
+  border-radius: 0;
+  border-bottom: 1px solid #333;
+  position: relative;
+}
+
+.multi-field:first-child {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+
+.multi-field:last-child {
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+  border-bottom: none;
+}
+
+.flight-icon-container {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flight-icon-up {
+  transform: rotate(-45deg);
+  font-size: 18px;
+  color: #ccc;
+}
+
+.flight-icon-down {
+  transform: rotate(135deg);
+  font-size: 18px;
+  color: #ccc;
+}
+
+.multi-connector {
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-left: 12px;
+}
+
+.connector-line {
+  width: 1px;
+  height: 16px;
+  background: #333;
+  margin-left: 6px;
+}
+
+.leg-remove {
+  text-align: left;
+  margin-top: 8px;
+  padding-left: 36px;
+}
+
+.remove-leg-btn {
+  background: #ff4757;
+  color: white;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.remove-leg-btn:hover {
+  background: #ff3742;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 71, 87, 0.3);
+}
+
+.remove-leg-btn:active {
+  transform: translateY(0);
+}
+
+.add-flight-container {
+  text-align: center;
+  margin-top: 16px;
+}
+
+.add-flight-btn {
+  background: linear-gradient(135deg, #0071c2 0%, #0056b3 100%);
+  color: white;
+  border: none;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 12px 24px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.add-flight-btn:hover {
+  background: linear-gradient(135deg, #0056b3 0%, #003d82 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 113, 194, 0.3);
+}
+
+.add-flight-btn:active {
+  transform: translateY(0);
+}
+
+.autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #1f1f1f;
+  border: 1px solid #333;
+  border-radius: 8px;
+  margin-top: -8px;
+  z-index: 1000;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.autocomplete-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #333;
+}
+
+.autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+.autocomplete-item:hover {
+  background: #2a2a2a;
+}
+
+.airport-city {
+  color: #aaa;
+  font-size: 14px;
+}
+
+/* Sign-in block styling */
+.sign-in-section{max-width:560px;margin:16px auto;padding:0 12px}
+.sign-in-section .sign-in-content{background:#1f1f1f;border:1px solid #333;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.sign-in-text{display:flex;flex-direction:column;gap:6px;flex:1}
+.sign-in-section .sign-in-title{margin:0 0 6px 0;color:#fff;font-weight:700;font-size:18px}
+.sign-in-section .sign-in-description{margin:0;color:#ccc;font-size:14px}
+.sign-in-button{background:#0071c2;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer}
+.genius-logo{min-width:72px;min-height:72px}
+
+/* Utility */
+.select-control{background:#2a2a2a;border:1px solid #3a3a3a;border-radius:8px;color:#fff;padding:8px}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+/* Apple Pay style button */
+.applepay-button{display:inline-flex;align-items:center;gap:10px;background:#000;color:#fff;border:none;border-radius:12px;padding:12px 16px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);transition:transform .08s ease, box-shadow .12s ease}
+.applepay-button.white{background:#fff;color:#000;border:1px solid #ddd;box-shadow:0 6px 18px rgba(0,0,0,.10)}
+.applepay-button:active{transform:translateY(1px);box-shadow:0 2px 10px rgba(0,0,0,.35)}
+.applepay-button.white:active{box-shadow:0 2px 10px rgba(0,0,0,.10)}
+.applepay-ico{display:inline-flex;align-items:center;justify-content:center}
+.applepay-lock{display:inline-flex;align-items:center;justify-content:center;margin-left:8px;opacity:.9}
+
+/* Mobile Responsive Improvements */
+@media (max-width: 768px) {
+  .header { padding: 12px 16px; }
+  .header h1 { font-size: 20px; }
+  .nav-tabs { gap: 8px; padding: 0 12px; }
+  .nav-tab { padding: 12px 14px; font-size: 14px; }
+  .search-container { width: 95vw; padding: 8px; }
+  .search-field { padding: 12px 14px; gap: 10px; }
+  .search-button { height: 48px; font-size: 16px; }
+  .hero-title { font-size: 20px; }
+  .hero-sub { font-size: 13px; }
+  .bottom-nav { padding: 8px 0; }
+  .bottom-nav-label { font-size: 11px; }
+  .search-card { padding: 10px; }
+  .remove-flight-container { top: 8px; right: 8px; }
+  .add-flight-section { padding: 12px; margin-left: -10px; margin-right: -10px; padding-left: 22px; padding-right: 22px; }
+  .multi-flight-block:not(:last-child) { padding-left: 10px; padding-right: 10px; margin-left: -10px; margin-right: -10px; }
+  
+  /* Apple Pay button mobile styles */
+  .applepay-button { 
+    width: auto; 
+    max-width: 280px; 
+    padding: 10px 14px; 
+    font-size: 14px; 
+    gap: 8px; 
+  }
+  .applepay-button.white { 
+    max-width: 280px; 
+  }
+}
+
+@media (max-width: 480px) {
+  .header { padding: 10px 12px; }
+  .header h1 { font-size: 18px; }
+  .nav-tabs { gap: 6px; padding: 0 8px; }
+  .nav-tab { padding: 10px 12px; font-size: 13px; }
+  .search-container { width: 96vw; padding: 6px; }
+  .search-field { padding: 10px 12px; gap: 8px; font-size: 14px; }
+  .search-button { height: 44px; font-size: 15px; }
+  .hero-title { font-size: 18px; }
+  .hero-sub { font-size: 12px; }
+  .bottom-nav-icon { width: 20px; height: 20px; }
+  .bottom-nav-label { font-size: 10px; }
+  .search-card { padding: 8px; }
+  .multi-flight-block:not(:last-child) { padding-left: 8px; padding-right: 8px; margin-left: -8px; margin-right: -8px; }
+  .multi-flight-block { padding-bottom: 10px; }
+  .add-flight-section { padding: 10px; margin-left: -8px; margin-right: -8px; padding-left: 18px; padding-right: 18px; }
+  
+  /* Apple Pay button extra small screens */
+  .applepay-button { 
+    max-width: 240px; 
+    padding: 8px 12px; 
+    font-size: 13px; 
+    gap: 6px; 
+  }
+  .applepay-button.white { 
+    max-width: 240px; 
+  }
+}
+
+/* Destinations Section */
+.destinations-section {
+  max-width: 1200px;
+  margin: 24px auto 24px;
+  padding: 0 16px;
+}
+
+/* Continue Search Section - чуть длиннее базового размера */
+.continue-search-section {
+  max-width: 1200px;
+  margin: 24px auto 24px;
+  padding: 0 16px;
+}
+
+.section-title {
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: -0.5px;
+}
+
+.section-subtitle {
+  color: #aaa;
+  font-size: 14px;
+  margin: 0 0 20px 0;
+}
+
+.destinations-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.destination-card {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  height: 160px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.destination-card.large {
+  grid-column: 1 / -1;
+  height: 200px;
+}
+
+.destination-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+}
+
+.destination-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.destination-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+  padding: 16px;
+  color: white;
+}
+
+.destination-name {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+}
+
+.destination-desc {
+  margin: 0;
+  font-size: 13px;
+  color: #ddd;
+}
+
+
+/* Offers Section */
+.offers-section {
+  max-width: 1200px;
+  margin: 24px auto 100px;
+  padding: 0 16px;
+}
+
+.offers-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.offer-card {
+  background: #1f1f1f;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #333;
+  transition: transform 0.2s ease;
+}
+
+.offer-card:hover {
+  transform: translateY(-2px);
+}
+
+.offer-card img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+}
+
+.offer-content {
+  padding: 16px;
+}
+
+
+.offer-title {
+  color: white;
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+}
+
+.offer-desc {
+  color: #aaa;
+  font-size: 14px;
+  margin: 0 0 16px 0;
+}
+
+.offer-button {
+  background: #0071c2;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.offer-button:hover {
+  background: #005a9c;
+}
+
+/* Убираем дублирующий CSS - оставляем только один блок */
+
+/* Делаем блок точно такого же размера как destinations-section */
+.destinations-section {
+  max-width: 1200px;
+  margin: 24px auto 24px;
+  padding: 0 16px;
+}
+
+.search-history-card {
+  background: #1f1f1f;
+  border: 1px solid #333;
+  border-radius: 12px;
+  height: 119px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+  max-width: none;
+  min-width: 100%;
+}
+
+/* На широких экранах ограничиваем ширину карточки, чтобы она не выходила за границы */
+@media (min-width: 768px) {
+  .search-history-card {
+    max-width: 100%;
+    width: 100%;
+  }
+}
+
+/* На очень широких экранах делаем карточку еще короче */
+@media (min-width: 1200px) {
+  .search-history-card {
+    max-width: 80%;
+  }
+}
+
+.search-history-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+}
+
+.search-history-card img {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.search-history-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-history-route {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.search-history-from,
+.search-history-to {
+  color: white;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.search-history-details {
+  color: #aaa;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .nav-tabs-compact {
+    padding: 8px 12px;
+    gap: 4px;
+  }
+  
+  .nav-tabs-compact .nav-tab {
+    padding: 10px 6px;
+    font-size: 12px;
+    gap: 6px;
+    min-height: 42px;
+  }
+  
+  .destinations-grid {
+    gap: 10px;
+  }
+  
+  .destination-card {
+    height: 140px;
+  }
+  
+  .destination-card.large {
+    height: 180px;
+  }
+  
+  .destination-name {
+    font-size: 18px;
+  }
+  
+  .offers-grid {
+    gap: 12px;
+  }
+  
+  .section-title {
+    font-size: 20px;
+  }
+  
+  .search-history-card img {
+    width: 60px;
+    height: 60px;
+  }
+}
+
+@media (min-width: 769px) {
+  .header { max-width: 1200px; margin: 0 auto; }
+  .nav-tabs { max-width: 600px; margin: 0 auto; grid-template-columns: repeat(3, 1fr); }
+  .nav-tabs .nav-tab:nth-child(3) { grid-column: auto; }
+  .nav-tabs-compact { grid-template-columns: repeat(3, 1fr); }
+  .bottom-nav { max-width: 600px; left: 50%; transform: translateX(-50%); border-radius: 12px 12px 0 0; }
+  
+  .destinations-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .destination-card.large {
+    grid-column: span 2;
+    grid-row: span 2;
+    height: 332px;
+  }
+  
+  .offers-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Splash Screen */
+.splash-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #003580;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: splash-fade-in 0.3s ease-in;
+  transition: opacity 0.5s ease-out;
+}
+
+.splash-screen.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-content {
+  text-align: center;
+  animation: splash-content-appear 0.6s ease-out;
+}
+
+.splash-logo {
+  font-size: 42px;
+  font-weight: 700;
+  color: white;
+  letter-spacing: -0.5px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+@keyframes splash-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes splash-content-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.app-hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.app-visible {
+  animation: app-fade-in 0.5s ease-in forwards;
+}
+
+@keyframes app-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Responsive splash logo */
+@media (max-width: 768px) {
+  .splash-logo {
+    font-size: 36px;
+  }
+}
+
+/* ==========================================
+   🎨 BEAUTIFUL LOADING ANIMATION
+   ========================================== */
+
+/* Stage 1: Flying Plane Animation */
+.loading-animation-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 40px 20px;
+  animation: fadeIn 0.3s ease-in;
+}
+
+.plane-animation {
+  position: relative;
+  width: 200px;
+  height: 100px;
+  margin-bottom: 32px;
+}
+
+.plane-icon {
+  width: 64px;
+  height: 64px;
+  color: #0071c2;
+  animation: planeFly 6s ease-in-out infinite;
+  filter: drop-shadow(0 4px 12px rgba(0, 113, 194, 0.3));
+}
+
+.plane-trail {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 113, 194, 0.3) 50%, transparent 100%);
+  animation: trailMove 6s ease-in-out infinite;
+  transform: translateY(-50%);
+}
+
+.loading-text {
+  font-size: 18px;
+  font-weight: 500;
+  color: #fff;
+  font-family: 'Inter', -apple-system, sans-serif;
+  animation: textPulse 2.5s ease-in-out infinite;
+  letter-spacing: -0.2px;
+  transition: all 0.4s ease-in-out;
+  min-height: 27px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes planeFly {
+  0% {
+    transform: translateX(-70px) translateY(10px) rotate(-4deg);
+    opacity: 0.5;
+  }
+  15% {
+    transform: translateX(-40px) translateY(2px) rotate(-1deg);
+    opacity: 0.75;
+  }
+  30% {
+    transform: translateX(-10px) translateY(-5px) rotate(2deg);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateX(20px) translateY(-10px) rotate(4deg);
+    opacity: 1;
+  }
+  70% {
+    transform: translateX(40px) translateY(-5px) rotate(2deg);
+    opacity: 0.9;
+  }
+  85% {
+    transform: translateX(60px) translateY(2px) rotate(-1deg);
+    opacity: 0.75;
+  }
+  100% {
+    transform: translateX(70px) translateY(10px) rotate(-4deg);
+    opacity: 0.5;
+  }
+}
+
+@keyframes trailMove {
+  0% {
+    opacity: 0.15;
+    transform: translateY(-50%) scaleX(0.6);
+  }
+  15% {
+    opacity: 0.3;
+    transform: translateY(-50%) scaleX(0.9);
+  }
+  30% {
+    opacity: 0.45;
+    transform: translateY(-50%) scaleX(1.1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translateY(-50%) scaleX(1.4);
+  }
+  70% {
+    opacity: 0.45;
+    transform: translateY(-50%) scaleX(1.1);
+  }
+  85% {
+    opacity: 0.3;
+    transform: translateY(-50%) scaleX(0.9);
+  }
+  100% {
+    opacity: 0.15;
+    transform: translateY(-50%) scaleX(0.6);
+  }
+}
+
+@keyframes textPulse {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Stage 2: Progress Bar & Loading Dots */
+.progress-container {
+  width: 280px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 24px;
+  position: relative;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #0071c2, #00a3ff);
+  border-radius: 2px;
+  transition: width 0.3s ease-out;
+  box-shadow: 0 0 10px rgba(0, 113, 194, 0.5);
+  position: relative;
+}
+
+.progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 40px;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4));
+  animation: progressShine 1s ease-in-out infinite;
+}
+
+@keyframes progressShine {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.loading-dots {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+  justify-content: center;
+  align-items: center;
+}
+
+.loading-dots .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #0071c2;
+  animation: dotBounce 1.4s ease-in-out infinite;
+}
+
+.loading-dots .dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.loading-dots .dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.loading-dots .dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes dotBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-12px);
+    opacity: 1;
+  }
+}
+
+/* Stage 3: Smooth appearance of real flight cards */
+.flight-card-appear {
+  animation: flightCardAppear 0.4s ease-out backwards;
+}
+
+.flight-card-appear:nth-child(1) { animation-delay: 0s; }
+.flight-card-appear:nth-child(2) { animation-delay: 0.05s; }
+.flight-card-appear:nth-child(3) { animation-delay: 0.1s; }
+.flight-card-appear:nth-child(4) { animation-delay: 0.15s; }
+.flight-card-appear:nth-child(5) { animation-delay: 0.2s; }
+.flight-card-appear:nth-child(6) { animation-delay: 0.25s; }
+.flight-card-appear:nth-child(7) { animation-delay: 0.3s; }
+.flight-card-appear:nth-child(8) { animation-delay: 0.35s; }
+
+@keyframes flightCardAppear {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .plane-animation {
+    width: 150px;
+    height: 80px;
+  }
+  
+  .plane-icon {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .loading-text {
+    font-size: 16px;
+  }
+  
+  .progress-container {
+    width: 220px;
+  }
+  
+  .loading-dots .dot {
+    width: 6px;
+    height: 6px;
+  }
+}
+
+/* Recent Searches Section */
+.recent-searches-section {
+  margin-top: 40px;
+  padding: 0 20px;
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.recent-searches-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.recent-searches-title {
+  color: white;
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 24px 0;
+  text-align: center;
+}
+
+.recent-searches-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.recent-search-card {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  border-radius: 16px;
+  padding: 0;
+  border: 1px solid #333;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.recent-search-card:hover {
+  transform: translateY(-4px);
+  border-color: #4A90E2;
+  box-shadow: 0 12px 24px rgba(74, 144, 226, 0.2);
+}
+
+.search-hotel-image {
+  position: relative;
+  height: 180px;
+  background: linear-gradient(135deg, rgba(74, 144, 226, 0.9) 0%, rgba(53, 122, 189, 0.9) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.search-hotel-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.6) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 16px;
+}
+
+.search-hotel-badge {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-block;
+  margin-bottom: 12px;
+  backdrop-filter: blur(10px);
+}
+
+.search-hotel-overlay h4 {
+  color: white;
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 4px 0;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.search-hotel-overlay p {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  margin: 0 0 12px 0;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.search-hotel-rating {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-stars {
+  color: #FFD700;
+  font-size: 14px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.search-rating {
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+}
+
+.search-hotel-info {
+  padding: 16px;
+}
+
+.search-hotel-price {
+  color: #4A90E2;
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.search-hotel-dates {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Responsive design for recent searches */
+@media (max-width: 768px) {
+  .recent-searches-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .search-hotel-overlay h4 {
+    font-size: 18px;
+  }
+  
+  .search-hotel-image {
+    height: 160px;
+  }
+}
+
+/* Continue your search - Hotels */
+.continue-search-section {
+  margin-top: 60px;
+  padding: 0 20px;
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.continue-search-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.continue-search-title {
+  color: white;
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  text-align: center;
+}
+
+.continue-search-subtitle {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 16px;
+  margin: 0 0 40px 0;
+  text-align: center;
+}
+
+.hotel-destinations-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 24px;
+}
+
+.hotel-destination-card {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  border-radius: 20px;
+  padding: 0;
+  border: 1px solid #333;
+  transition: all 0.4s ease;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.hotel-destination-card:hover {
+  transform: translateY(-6px);
+  border-color: #4A90E2;
+  box-shadow: 0 16px 32px rgba(74, 144, 226, 0.3);
+}
+
+
+.destination-image {
+  position: relative;
+  height: 220px;
+  overflow: hidden;
+}
+
+.destination-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.hotel-destination-card:hover .destination-image img {
+  transform: scale(1.05);
+}
+
+.destination-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.7) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+}
+
+.destination-badge {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 6px 16px;
+  border-radius: 25px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-block;
+  margin-bottom: 16px;
+  backdrop-filter: blur(10px);
+}
+
+.destination-overlay h3 {
+  color: white;
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.destination-overlay p {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 16px;
+  margin: 0 0 16px 0;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.destination-rating {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.destination-stars {
+  color: #FFD700;
+  font-size: 18px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.destination-rating-value {
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 8px;
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+}
+
+.destination-content {
+  padding: 24px;
+}
+
+.destination-price {
+  color: #4A90E2;
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.destination-stats {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.destination-dates {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Responsive design for hotel destinations */
+@media (max-width: 1200px) {
+  .hotel-destinations-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+}
+
+@media (max-width: 768px) {
+  .hotel-destinations-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  
+  
+  .continue-search-title {
+    font-size: 28px;
+  }
+  
+  .destination-overlay h3 {
+    font-size: 24px;
+  }
+  
+  .destination-image {
+    height: 180px;
+  }
+}
+

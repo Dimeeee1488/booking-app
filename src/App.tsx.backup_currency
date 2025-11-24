@@ -1,0 +1,2124 @@
+import React from 'react';
+import { Routes, Route, useNavigate } from 'react-router-dom';
+import FlightResultsMulti from './FlightResultsMulti';
+import FlightResults from './FlightResults';
+import { searchAirports, detectCurrencyByIP } from './services/flightApi';
+import { searchHotelDestinationsCached } from './services/hotelApi';
+import FlightDetail from './FlightDetail';
+import TicketType from './TicketType';
+import SeatMap from './SeatMap';
+import SeatSelection from './SeatSelection';
+import Luggage from './Luggage';
+import DatePickerModal from './components/DatePickerModal';
+import GuestsRoomsModal from './components/GuestsRoomsModal';
+import Payment from './Payment';
+import NewCard from './NewCard';
+import TravelerDetails from './TravelerDetails';
+import ContactDetails from './ContactDetails';
+import DetailsHub from './DetailsHub';
+import BookingsPage from './BookingsPage';
+import HotelResults from './HotelResults';
+import HotelDetails from './HotelDetails';
+import './App.css';
+
+// Session utility functions
+const initSession = () => {
+  try {
+    sessionStorage.setItem('session_timestamp', Date.now().toString());
+  } catch (e) {
+    console.error('Failed to init session:', e);
+  }
+};
+
+const updateSession = () => {
+  try {
+    sessionStorage.setItem('session_timestamp', Date.now().toString());
+  } catch (e) {
+    console.error('Failed to update session:', e);
+  }
+};
+
+// Enhanced route guard: strict session-only protection
+const RouteGuard: React.FC<{ children: React.ReactNode; requireOffer?: boolean; requireFlow?: boolean }> = ({ children, requireOffer = false, requireFlow = false }) => {
+  const navigate = useNavigate();
+  const [isValid, setIsValid] = React.useState(false);
+  
+  React.useEffect(() => {
+    // Only check sessionStorage - NO localStorage fallback
+    const offerId = sessionStorage.getItem('current_offer_id');
+    const flow = sessionStorage.getItem('flow_price');
+    const sessionTimestamp = sessionStorage.getItem('session_timestamp');
+    
+    // Check if session is still valid (within 30 minutes)
+    const now = Date.now();
+    const sessionAge = sessionTimestamp ? now - parseInt(sessionTimestamp) : Infinity;
+    const isSessionExpired = sessionAge > 30 * 60 * 1000; // 30 minutes
+    
+    console.log('RouteGuard: Strict check', { 
+      requireOffer, 
+      requireFlow, 
+      hasOffer: !!offerId, 
+      hasFlow: !!flow,
+      sessionAge: Math.floor(sessionAge / 1000) + 's',
+      expired: isSessionExpired
+    });
+    
+    // If session expired, clear everything
+    if (isSessionExpired) {
+      console.log('RouteGuard: Session expired, clearing data');
+      sessionStorage.clear();
+      navigate('/', { replace: true });
+      return;
+    }
+    
+    // Strict validation - no data = no access
+    if ((requireOffer && !offerId) || (requireFlow && !flow)) {
+      console.log('RouteGuard: Access denied - missing required data');
+      navigate('/', { replace: true });
+      return;
+    }
+    
+    console.log('RouteGuard: Access granted');
+    setIsValid(true);
+  }, [navigate, requireOffer, requireFlow]);
+  
+  // Don't render children until validation passes
+  return isValid ? <>{children}</> : null;
+};
+
+// Иконки как SVG компоненты
+const BellIcon = () => (
+  <svg className="notification-icon" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
+  </svg>
+);
+
+const BedIcon = () => (
+  <svg className="nav-tab-icon" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M7 14c1.66 0 3-1.34 3-3S8.66 8 7 8s-3 1.34-3 3 1.34 3 3 3zm0-4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm12-3h-8v8H3V9H1v11h2v-2h18v2h2v-7c0-2.21-1.79-4-4-4z"/>
+  </svg>
+);
+
+const FlightIcon = () => (
+  <svg className="nav-tab-icon" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+  </svg>
+);
+
+const CarIcon = () => (
+  <svg className="nav-tab-icon" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.22.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>
+  </svg>
+);
+
+
+const SearchIcon = () => (
+  <svg className="search-field-icon" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+  </svg>
+);
+
+const CalendarIcon = () => (
+  <svg className="search-field-icon" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/>
+  </svg>
+);
+
+const PersonIcon = () => (
+  <svg className="search-field-icon" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+  </svg>
+);
+
+const SearchNavIcon = () => (
+  <svg className="bottom-nav-icon" fill="currentColor" viewBox="0 -960 960 960">
+    <path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/>
+  </svg>
+);
+
+const HeartIcon = () => (
+  <svg className="bottom-nav-icon" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+  </svg>
+);
+
+const SuitcaseIcon = () => (
+  <svg className="bottom-nav-icon" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+  </svg>
+);
+
+const UserIcon = () => (
+  <svg className="bottom-nav-icon" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+  </svg>
+);
+
+// Дополнительные иконки
+const SwapIcon = () => (
+  <svg width="20" height="20" fill="#0071c2" viewBox="0 0 24 24">
+    <path d="M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z"/>
+  </svg>
+);
+
+
+const BookingsNavIcon = () => (
+  <svg className="bottom-nav-icon" fill="currentColor" viewBox="0 -960 960 960">
+    <path d="M160-120q-33 0-56.5-23.5T80-200v-440q0-33 23.5-56.5T160-720h160v-80q0-33 23.5-56.5T400-880h160q33 0 56.5 23.5T640-800v80h160q33 0 56.5 23.5T880-640v440q0 33-23.5 56.5T800-120H160Zm240-600h160v-80H400v80Zm-160 80h-80v440h80v-440Zm400 440v-440H320v440h320Zm80-440v440h80v-440h-80ZM480-420Z"/>
+  </svg>
+);
+
+const SignInNavIcon = () => (
+  <svg className="bottom-nav-icon" fill="currentColor" viewBox="0 -960 960 960">
+    <path d="M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm240-320q33 0 56.5-23.5T560-640q0-33-23.5-56.5T480-720q-33 0-56.5 23.5T400-640q0 33 23.5 56.5T480-560Zm0-80Zm0 400Z"/>
+  </svg>
+);
+
+const ToggleSwitch = ({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) => (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+    <span style={{ color: 'white', fontSize: '16px' }}>{label}</span>
+    <div 
+      onClick={() => onChange(!checked)}
+      style={{
+        width: '51px',
+        height: '31px',
+        borderRadius: '16px',
+        background: checked ? '#0071c2' : '#404040',
+        position: 'relative',
+        cursor: 'pointer',
+        transition: 'background 0.2s'
+      }}
+    >
+      <div 
+        style={{
+          width: '27px',
+          height: '27px',
+          borderRadius: '50%',
+          background: 'white',
+          position: 'absolute',
+          top: '2px',
+          left: checked ? '22px' : '2px',
+          transition: 'left 0.2s'
+        }}
+      />
+    </div>
+  </div>
+);
+
+const RadioButton = ({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={onChange}>
+    <div 
+      style={{
+        width: '20px',
+        height: '20px',
+        borderRadius: '50%',
+        border: '2px solid #ccc',
+        position: 'relative',
+        background: checked ? '#0071c2' : 'transparent',
+        borderColor: checked ? '#0071c2' : '#ccc'
+      }}
+    >
+      {checked && (
+        <div 
+          style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: 'white',
+            position: 'absolute',
+            top: '4px',
+            left: '4px'
+          }}
+        />
+      )}
+    </div>
+    <span style={{ color: 'white', fontSize: '16px' }}>{label}</span>
+  </div>
+);
+
+// Genius Logo компонент
+const GeniusLogo = () => (
+  <div className="genius-logo" style={{
+    background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #fbbf24 100%)',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '14px',
+    fontWeight: 'bold',
+    color: 'white',
+    position: 'relative'
+  }}>
+    Genius
+    <div style={{
+      position: 'absolute',
+      bottom: '10px',
+      right: '10px',
+      width: '20px',
+      height: '20px',
+      background: '#1e40af',
+      borderRadius: '50%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '10px'
+    }}>
+      ★
+    </div>
+  </div>
+);
+
+const HomePage = () => {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = React.useState('stays');
+  const navigationType = 'forward'; // По умолчанию
+  
+  // Состояния для Car rental
+  const [returnToSameLocation, setReturnToSameLocation] = React.useState(true);
+  
+  // Состояния для Flights
+  const [flightType, setFlightType] = React.useState('round-trip');
+  const [directFlightsOnly, setDirectFlightsOnly] = React.useState(false);
+  const [multiLegs, setMultiLegs] = React.useState<Array<{from:string;to:string;date:string}>>([
+    { from: '', to: '', date: '' },
+    { from: '', to: '', date: '' }
+  ]);
+  const [multiLegIds, setMultiLegIds] = React.useState<Array<{fromId?:string;toId?:string}>>([{}, {}]);
+  const [multiSuggest, setMultiSuggest] = React.useState<any[]>([]);
+  const [multiShow, setMultiShow] = React.useState(false);
+  const [multiActive, setMultiActive] = React.useState<{idx:number;type:'from'|'to'}|null>(null);
+  const multiDebounceRef = React.useRef<any>();
+  
+      // Состояния для поиска городов (пустые поля по умолчанию)
+      const [fromCity, setFromCity] = React.useState('');
+      const [toCity, setToCity] = React.useState('');
+  
+  // Hotel search states
+  const [hotelDestination, setHotelDestination] = React.useState('');
+  const [hotelSuggestions, setHotelSuggestions] = React.useState<any[]>([]);
+  const [showHotelDropdown, setShowHotelDropdown] = React.useState(false);
+  const [selectedHotelId, setSelectedHotelId] = React.useState<string>('');
+  const [isSearchingHotels, setIsSearchingHotels] = React.useState(false);
+  const hotelDebounceRef = React.useRef<any>();
+  
+  // Stays date states
+  const [staysCheckIn, setStaysCheckIn] = React.useState('');
+  const [staysCheckOut, setStaysCheckOut] = React.useState('');
+  const [showStaysDatePicker, setShowStaysDatePicker] = React.useState(false);
+  const [staysDateFieldType, setStaysDateFieldType] = React.useState<'checkin' | 'checkout'>('checkin');
+  
+  // Stays guests & rooms states
+  const [staysRooms, setStaysRooms] = React.useState(1);
+  const [staysAdults, setStaysAdults] = React.useState(2);
+  const [staysChildren, setStaysChildren] = React.useState(0);
+  const [staysChildrenAges, setStaysChildrenAges] = React.useState<number[]>([]);
+  const [showStaysGuestsModal, setShowStaysGuestsModal] = React.useState(false);
+  // Пустые даты по умолчанию - пользователь сам выберет
+  const [departDate, setDepartDate] = React.useState('');
+  const [returnDate, setReturnDate] = React.useState('');
+  const [adults, setAdults] = React.useState(1);
+  const [childrenCount, setChildrenCount] = React.useState(0);
+  const [childrenAges, setChildrenAges] = React.useState<string[]>([]);
+  const [cabinClass, setCabinClass] = React.useState<'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST'>('ECONOMY');
+  const [currency, setCurrency] = React.useState('USD');
+  const [stops, setStops] = React.useState<'0' | '1' | '2'>('2');
+
+  // Autocomplete state
+  const [fromSuggestions, setFromSuggestions] = React.useState<any[]>([]);
+  const [toSuggestions, setToSuggestions] = React.useState<any[]>([]);
+  const [fromSelectedId, setFromSelectedId] = React.useState<string>('');
+  const [toSelectedId, setToSelectedId] = React.useState<string>('');
+  const [showFromDropdown, setShowFromDropdown] = React.useState(false);
+  const [showToDropdown, setShowToDropdown] = React.useState(false);
+  const debounceRef = React.useRef<any>();
+  const [showTravellersModal, setShowTravellersModal] = React.useState(false);
+  const [showDatePickerModal, setShowDatePickerModal] = React.useState(false);
+  const [dateFieldType, setDateFieldType] = React.useState<'departure' | 'return'>('departure');
+  const [activeLegIndex, setActiveLegIndex] = React.useState<number>(0);
+  const [travellersModalSection, setTravellersModalSection] = React.useState<'pax'|'stops'|'currency'>('pax');
+  const paxRef = React.useRef<HTMLDivElement>(null);
+  const stopsRef = React.useRef<HTMLDivElement>(null);
+  const currencyRef = React.useRef<HTMLDivElement>(null);
+  const [currencyFilter, setCurrencyFilter] = React.useState('');
+  const [openStops, setOpenStops] = React.useState(false);
+  const [openCurrency, setOpenCurrency] = React.useState(false);
+
+  // Перерисовываем карточку продолжения поиска при возвращении на вкладку/фокусе
+  const [lastSearchVersion, setLastSearchVersion] = React.useState(0);
+  React.useEffect(() => {
+    const refresh = () => setLastSearchVersion(v => v + 1);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('storage', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('storage', refresh);
+    };
+  }, []);
+
+  // Auto-detect currency on first visit using IP-based geolocation
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const already = sessionStorage.getItem('currency_autoset');
+        if (already === '1') return;
+        const res = await detectCurrencyByIP();
+        const cc = (res?.currency || '').toUpperCase();
+        if (cc && currency !== cc) {
+          setCurrency(cc);
+        }
+        sessionStorage.setItem('currency_autoset','1');
+      } catch {}
+    })();
+  }, []);
+
+  // Функции форматирования дат
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const options: Intl.DateTimeFormatOptions = { 
+      weekday: 'short', 
+      day: 'numeric', 
+      month: 'short' 
+    };
+    return date.toLocaleDateString('en-GB', options);
+  };
+
+  // Stays date formatting
+  const formatStaysDateRange = (checkIn: string, checkOut: string) => {
+    if (!checkIn) return '';
+    const checkInFormatted = formatDate(checkIn);
+    if (checkOut) {
+      const checkOutFormatted = formatDate(checkOut);
+      return `${checkInFormatted} - ${checkOutFormatted}`;
+    }
+    return checkInFormatted;
+  };
+
+  const formatDateRange = (depart: string, arrive: string) => {
+    const departFormatted = formatDate(depart);
+    if (flightType === 'round-trip' && arrive) {
+      const arriveFormatted = formatDate(arrive);
+      return `${departFormatted} - ${arriveFormatted}`;
+    }
+    return departFormatted;
+  };
+
+  const formatSingleDate = (dateStr: string) => {
+    return formatDate(dateStr);
+  };
+
+  // Обработчик выбора даты из календаря
+  const handleDateSelect = (departDateSelected: string, returnDateSelected?: string) => {
+    setDepartDate(departDateSelected);
+    if (flightType === 'round-trip' && returnDateSelected) {
+      setReturnDate(returnDateSelected);
+    }
+    // Для one-way и случаев когда возврат не указан, просто устанавливаем дату отправления
+  };
+
+  // Stays date selection handler
+  const handleStaysDateSelect = (checkInDate: string, checkOutDate?: string) => {
+    setStaysCheckIn(checkInDate);
+    if (checkOutDate) {
+      setStaysCheckOut(checkOutDate);
+    }
+  };
+
+  // Stays guests summary formatter
+  const formatStaysGuestsSummary = () => {
+    const roomsText = `${staysRooms} room${staysRooms > 1 ? 's' : ''}`;
+    const adultsText = `${staysAdults} adult${staysAdults > 1 ? 's' : ''}`;
+    const childrenText = staysChildren > 0 ? `${staysChildren} child${staysChildren > 1 ? 'ren' : ''}` : 'No children';
+    return `${roomsText} · ${adultsText} · ${childrenText}`;
+  };
+
+  // Handle guests/rooms modal apply
+  const handleStaysGuestsApply = (rooms: number, adults: number, children: number, childrenAges: number[]) => {
+    setStaysRooms(rooms);
+    setStaysAdults(adults);
+    setStaysChildren(children);
+    setStaysChildrenAges(childrenAges);
+  };
+  const currencyOptions = React.useMemo(() => ([
+    'USD','EUR','GBP','AUD','CAD','CHF','JPY','CNY','INR','KRW',
+    'SGD','HKD','NZD','SEK','NOK','DKK','MXN','BRL','ARS','CLP',
+    'COP','PEN','BOB','UYU','PYG','VEF','CRC','GTQ','HNL','NIO',
+    'PAB','DOP','JMD','BBD','TTD','XCD','BSD','BZD',
+    'AED','SAR','QAR','OMR','KWD','BHD','ILS','EGP','JOD','LBP',
+    'SYP','IQD','YER','TRY','IRR','AFN','PKR','LKR','BDT','NPR',
+    'MVR','BTN','MMK',
+    'THB','VND','MYR','IDR','PHP','BND','LAK','KHR','TWD','MOP',
+    'PLN','CZK','HUF','RON','BGN','HRK','RSD','BAM','MKD','ALL',
+    'ISK','RUB','UAH','BYN','MDL','GEL','ARM','AZN','KZT','UZS',
+    'TJS','KGS','TMT','MNT',
+    'ZAR','NGN','GHS','KES','TZS','UGX','RWF','BIF','ETB','DJF',
+    'SOS','MUR','SCR','MGA','KMF','AOA','MZN','ZMW','BWP','NAD',
+    'SZL','LSL','ZWL','MWK','MAD','TND','DZD','LYD','SDG','SSP',
+    'ERN','GMD','GNF','LRD','SLL','CVE','STN','XOF','XAF','CDF',
+    'XPF','FJD','PGK','SBD','VUV','WST','TOP'
+  ]), []);
+
+  const travellersSummary = React.useMemo(() => {
+    const ch = childrenCount > 0 ? `, ${childrenCount} child${childrenCount>1?'ren':''}` : '';
+    const stopsLabel = stops === '0' ? ' · Non-stop' : (stops === '1' ? ' · Up to 1 stop' : '');
+    return `${adults} adult${adults>1?'s':''}${ch} · ${cabinClass.replace('_',' ')} · ${currency}${stopsLabel}`;
+  }, [adults, childrenCount, cabinClass, currency, stops]);
+
+  React.useEffect(() => {
+    if (!showTravellersModal) return;
+    setOpenStops(travellersModalSection === 'stops');
+    setOpenCurrency(travellersModalSection === 'currency');
+    const ref = travellersModalSection === 'pax' ? paxRef : (travellersModalSection === 'stops' ? stopsRef : currencyRef);
+    setTimeout(() => {
+      ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  }, [showTravellersModal, travellersModalSection]);
+
+  // Функция для очистки полей
+  const clearFields = () => {
+    setFromCity('');
+    setToCity('');
+  };
+
+  // Функция для обмена городов
+  const swapCities = () => {
+    const temp = fromCity;
+    setFromCity(toCity);
+    setToCity(temp);
+  };
+
+  // Функция для преобразования города в код аэропорта
+  const getAirportCode = (cityInput: string): string => {
+    const input = cityInput.toLowerCase().trim();
+    
+        // Популярные города и их правильные ID для API
+        const cityToCode: { [key: string]: string } = {
+          'mumbai': 'BOM.AIRPORT',
+          'bom': 'BOM.AIRPORT',
+          'delhi': 'DEL.AIRPORT',
+          'del': 'DEL.AIRPORT',
+          'madrid': 'MAD.AIRPORT',
+          'mad': 'MAD.AIRPORT',
+          'paris': 'CDG.AIRPORT', 
+          'cdg': 'CDG.AIRPORT',
+          'london': 'LHR.AIRPORT',
+          'lhr': 'LHR.AIRPORT',
+          'new york': 'JFK.AIRPORT',
+          'jfk': 'JFK.AIRPORT',
+          'tokyo': 'NRT.AIRPORT',
+          'nrt': 'NRT.AIRPORT',
+          'dubai': 'DXB.AIRPORT',
+          'dxb': 'DXB.AIRPORT',
+          'singapore': 'SIN.AIRPORT',
+          'sin': 'SIN.AIRPORT',
+          'los angeles': 'LAX.AIRPORT',
+          'lax': 'LAX.AIRPORT',
+          'frankfurt': 'FRA.AIRPORT',
+          'fra': 'FRA.AIRPORT',
+          'amsterdam': 'AMS.AIRPORT',
+          'ams': 'AMS.AIRPORT',
+          'madrid': 'MAD.AIRPORT',
+          'mad': 'MAD.AIRPORT',
+          'rome': 'FCO.AIRPORT',
+          'fco': 'FCO.AIRPORT',
+          'moscow': 'SVO.AIRPORT',
+          'svo': 'SVO.AIRPORT',
+          'istanbul': 'IST.AIRPORT',
+          'ist': 'IST.AIRPORT',
+          'sydney': 'SYD.AIRPORT',
+          'syd': 'SYD.AIRPORT',
+          'melbourne': 'MEL.AIRPORT',
+          'mel': 'MEL.AIRPORT',
+          'toronto': 'YYZ.AIRPORT',
+          'yyz': 'YYZ.AIRPORT',
+          'vancouver': 'YVR.AIRPORT',
+          'yvr': 'YVR.AIRPORT',
+          'shanghai': 'PVG.AIRPORT',
+          'pvg': 'PVG.AIRPORT',
+          'beijing': 'PEK.AIRPORT',
+          'pek': 'PEK.AIRPORT',
+          'hong kong': 'HKG.AIRPORT',
+          'hkg': 'HKG.AIRPORT',
+          'seoul': 'ICN.AIRPORT',
+          'icn': 'ICN.AIRPORT',
+          'taipei': 'TPE.AIRPORT',
+          'tpe': 'TPE.AIRPORT',
+          'manila': 'MNL.AIRPORT',
+          'mnl': 'MNL.AIRPORT',
+          'jakarta': 'CGK.AIRPORT',
+          'cgk': 'CGK.AIRPORT',
+          'kuala lumpur': 'KUL.AIRPORT',
+          'kul': 'KUL.AIRPORT',
+          'ho chi minh': 'SGN.AIRPORT',
+          'sgn': 'SGN.AIRPORT',
+          'hanoi': 'HAN.AIRPORT',
+          'han': 'HAN.AIRPORT',
+          'phuket': 'HKT.AIRPORT',
+          'hkt': 'HKT.AIRPORT',
+          'chiang mai': 'CNX.AIRPORT',
+          'cnx': 'CNX.AIRPORT'
+        };
+
+    // Проверяем точное совпадение
+    if (cityToCode[input]) {
+      return cityToCode[input];
+    }
+
+    // Проверяем частичное совпадение
+    for (const [city, code] of Object.entries(cityToCode)) {
+      if (input.includes(city) || city.includes(input)) {
+        return code;
+      }
+    }
+
+    // Если не найдено, возвращаем как есть (возможно уже код аэропорта)
+    return input.toUpperCase() + '.AIRPORT';
+  };
+
+  const [searchError, setSearchError] = React.useState<string>('');
+
+  const handleSearch = async () => {
+    try {
+      setSearchError('');
+      
+      // Initialize session timestamp for security
+      initSession();
+      
+      // Новый поиск должен принудительно игнорировать freeze/снапшот
+      try {
+        // Новый поиск: снимаем флаги возврата/заморозки/запрета, но не трогаем снапшоты
+        sessionStorage.removeItem('flightResults_freeze');
+        sessionStorage.removeItem('flightResultsMulti_freeze');
+        sessionStorage.removeItem('flightResults_back');
+        sessionStorage.removeItem('flightResults_no_fetch');
+        sessionStorage.setItem('flightResults_force_refresh','1');
+        sessionStorage.setItem('flightResultsMulti_force_refresh','1');
+      } catch {}
+      // Резолвим ID через API
+      const resolveId = async (input: string): Promise<string> => {
+        const raw = (input || '').trim();
+        if (!raw) return '';
+        // Попробовать вытащить IATA из строк вида "TBS · TBILISI INTERNATIONAL AIRPORT" или "TBS - Tbilisi"
+        const head = raw.split('·')[0].split('-')[0].trim();
+        const iataMatch = head.match(/^[A-Za-z]{3}$/) || raw.match(/\b([A-Za-z]{3})\b/);
+        if (iataMatch) return `${(iataMatch[0] || iataMatch[1]).toUpperCase()}.AIRPORT`;
+        // Если уже корректный id
+        if (raw.includes('.AIRPORT')) {
+          // Очистим от лишнего текста перед id
+          const m = raw.match(/[A-Z]{3}\.AIRPORT/);
+          if (m) return m[0];
+          return raw;
+        }
+        // 3‑буквенный код без суффикса
+        if (/^[A-Za-z]{3}$/.test(raw)) return `${raw.toUpperCase()}.AIRPORT`;
+        // Сначала локальная карта соответствий [[memory:7924107]]
+        const local = getAirportCode(raw);
+        if (local && local.includes('.AIRPORT')) return local;
+        // Фолбэк через API
+        const results = await searchAirports(raw);
+        const airport = results.find((r: any) => r.type === 'AIRPORT');
+        return airport?.id || `${raw.toUpperCase()}.AIRPORT`;
+      };
+
+      if (flightType === 'multi-city') {
+        // Валидация: обязательно дата для каждого сегмента
+        const missingIdx = multiLegs.findIndex(l => !l.date || String(l.date).trim() === '');
+        if (missingIdx !== -1) {
+          setSearchError(`Please select a date for segment #${missingIdx + 1}`);
+          return;
+        }
+        const legsResolved: any[] = [];
+        for (let i=0;i<multiLegs.length;i++) {
+          const leg = multiLegs[i];
+          const ids = multiLegIds[i] || {} as any;
+          const fromId = ids.fromId || await resolveId(leg.from);
+          const toId = ids.toId || await resolveId(leg.to);
+          legsResolved.push({ fromId, toId, date: leg.date });
+        }
+        const params = new URLSearchParams({
+          legs: JSON.stringify(legsResolved),
+          adults: String(adults),
+          cabinClass,
+          currency,
+          sort: 'BEST'
+        });
+        if (childrenCount > 0 && childrenAges.length > 0) {
+          params.set('children', childrenAges.join(','));
+        }
+        navigate(`/flight-results-multi?${params.toString()}`);
+        return;
+      }
+
+      const fromId = fromSelectedId || await resolveId(fromCity);
+      const toId = toSelectedId || await resolveId(toCity);
+
+      // Валидация для one-way/round-trip
+      if (!departDate || String(departDate).trim() === '') {
+        setSearchError('Please select a departure date');
+        return;
+      }
+      if (flightType === 'round-trip' && (!returnDate || String(returnDate).trim() === '')) {
+        setSearchError('Please select a return date');
+        return;
+      }
+
+      const params: Record<string, string> = {
+        from: fromId,
+        to: toId,
+        departDate: departDate,
+        returnDate: flightType === 'round-trip' ? returnDate : '',
+        adults: String(adults),
+        cabinClass: cabinClass,
+        currency: currency,
+        stops: stops,
+        sort: 'BEST'
+      };
+      if (childrenCount > 0 && childrenAges.length > 0) {
+        params.children = childrenAges.join(',');
+      }
+      Object.keys(params).forEach((k) => { if (params[k] === '') delete params[k]; });
+
+      const searchParams = new URLSearchParams(params);
+      if (activeTab !== 'flights') setActiveTab('flights');
+      navigate(`/flight-results?${searchParams.toString()}`);
+    } catch (_) {}
+  };
+
+  const searchFormRef = React.useRef<HTMLDivElement>(null);
+  const [isScrolled, setIsScrolled] = React.useState(false);
+  
+  React.useEffect(() => {
+    let ticking = false;
+    
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const scrollY = window.scrollY;
+          
+          // Compact mode activates very early for smooth transition
+          const compactThreshold = 50;    // compact when scrolling DOWN past 50px
+          const expandThreshold = 20;     // expand when scrolling UP above 20px
+          
+          setIsScrolled((prevState) => {
+            if (prevState) {
+              return scrollY > expandThreshold;
+            } else {
+              return scrollY > compactThreshold;
+            }
+          });
+          
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+    
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+  
+  const scrollToSearch = () => {
+    searchFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setActiveTab('flights');
+  };
+
+  return (
+    <div className="app">
+      {/* Header */}
+      <header className="header">
+        <h1>Booking.com</h1>
+      </header>
+
+      {/* (card moved below Trending header) */}
+
+      {/* Navigation Tabs */}
+      <div className={`nav-tabs ${isScrolled ? 'nav-tabs-compact' : ''}`}>
+        <button 
+          className={`nav-tab ${activeTab === 'stays' ? 'active' : ''}`}
+          onClick={() => setActiveTab('stays')}
+        >
+          <BedIcon />
+          Stays
+        </button>
+        <button 
+          className={`nav-tab ${activeTab === 'flights' ? 'active' : ''}`}
+          onClick={() => setActiveTab('flights')}
+        >
+          <FlightIcon />
+          Flights
+        </button>
+        <button 
+          className={`nav-tab ${activeTab === 'car' ? 'active' : ''}`}
+          onClick={() => setActiveTab('car')}
+        >
+          <CarIcon />
+          Car rental
+        </button>
+      </div>
+
+      {/* Search Form */}
+      <div className="search-container" ref={searchFormRef}>
+        {/* Stays Form */}
+        {activeTab === 'stays' && (
+          <div className="search-card">
+            <div className="search-field">
+              <SearchIcon />
+              <div className="search-field-content">
+                <input
+                  type="text"
+                  value={hotelDestination}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setHotelDestination(v);
+                    setSelectedHotelId('');
+                    setShowHotelDropdown(true);
+                    clearTimeout(hotelDebounceRef.current);
+                    hotelDebounceRef.current = setTimeout(async () => {
+                      if (v.trim().length < 2) { 
+                        console.log('Query too short, clearing suggestions');
+                        setHotelSuggestions([]); 
+                        setIsSearchingHotels(false);
+                        return; 
+                      }
+                      console.log('Searching for hotels with query:', v.trim());
+                      setIsSearchingHotels(true);
+                      try {
+                        const results = await searchHotelDestinationsCached(v.trim());
+                        console.log('Got hotel results:', results);
+                        console.log('Number of results:', results.length);
+                        setHotelSuggestions(results);
+                      } catch (error) {
+                        console.error('Error in hotel search:', error);
+                        setHotelSuggestions([]); 
+                      } finally {
+                        setIsSearchingHotels(false);
+                      }
+                    }, 300);
+                  }}
+                  placeholder="Where are you going?"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    outline: 'none',
+                    color: 'white',
+                    fontSize: '16px',
+                    width: '100%'
+                  }}
+                  onFocus={() => setShowHotelDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowHotelDropdown(false), 150)}
+                />
+              </div>
+            </div>
+            {showHotelDropdown && (hotelSuggestions.length > 0 || isSearchingHotels) && (
+              <div className="hotel-suggestions">
+                {console.log('Rendering suggestions:', hotelSuggestions.length, 'items', 'isSearching:', isSearchingHotels)}
+                {isSearchingHotels ? (
+                  <div style={{ padding: '12px 16px', color: '#aaa', textAlign: 'center' }}>
+                    Searching...
+                  </div>
+                ) : hotelSuggestions.length > 0 ? (
+                  hotelSuggestions.map((destination: any) => (
+                  <div key={destination.dest_id}
+                       className="hotel-suggestion-item"
+                       onMouseDown={() => { 
+                         setSelectedHotelId(destination.dest_id); 
+                         setHotelDestination(destination.displayName || destination.label || destination.name); 
+                         setShowHotelDropdown(false); 
+                       }}>
+                    <div className="hotel-suggestion-main">
+                      <span className="hotel-suggestion-name">
+                        {destination.displayName || destination.label || destination.name}
+                      </span>
+                      <span className="hotel-suggestion-location">
+                        {destination.fullLocation || destination.country}
+                      </span>
+                    </div>
+                    <div className="hotel-suggestion-meta">
+                      {destination.nr_hotels && (
+                        <span className="hotel-count">
+                          {destination.nr_hotels} hotels
+                        </span>
+                      )}
+                      <span className="hotel-type">
+                        {destination.dest_type}
+                      </span>
+                    </div>
+                  </div>
+                ))
+                ) : (
+                  <div style={{ padding: '12px 16px', color: '#aaa', textAlign: 'center' }}>
+                    No results found
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="search-field" onClick={() => {
+              setShowStaysDatePicker(true);
+              setStaysDateFieldType('checkin');
+            }}>
+              <CalendarIcon />
+              <div className="search-field-content">
+                <div style={{ color: 'white', fontSize: '16px', cursor: 'pointer' }}>
+                  {staysCheckIn 
+                    ? formatStaysDateRange(staysCheckIn, staysCheckOut)
+                    : 'Check-in - Check-out'}
+                </div>
+              </div>
+            </div>
+            <div className="search-field" onClick={() => setShowStaysGuestsModal(true)}>
+              <PersonIcon />
+              <div className="search-field-content">
+                <div style={{ color: 'white', fontSize: '16px', cursor: 'pointer' }}>
+                  {formatStaysGuestsSummary()}
+                </div>
+              </div>
+            </div>
+            <button className="search-button" onClick={() => {
+              if (!hotelDestination || !staysCheckIn || !staysCheckOut) {
+                alert('Please fill in all fields');
+                return;
+              }
+              
+              // Navigate to hotel results page
+              const params = new URLSearchParams({
+                dest_id: selectedHotelId,
+                arrival_date: staysCheckIn,
+                departure_date: staysCheckOut,
+                adults: String(staysAdults),
+                room_qty: String(staysRooms),
+                currency_code: currency,
+              });
+              
+              if (staysChildren > 0 && staysChildrenAges.length > 0) {
+                params.set('children_age', staysChildrenAges.join(','));
+              }
+              
+              navigate(`/hotel-results?${params.toString()}`);
+            }}>Search</button>
+          </div>
+        )}
+
+      {showTravellersModal && (
+        <div className="modal-overlay" style={{ alignItems:'center', justifyContent:'center' }} onClick={() => setShowTravellersModal(false)}>
+          <div className="travellers-modal" style={{ zIndex: 4000, maxHeight:'80vh', overflowY:'auto' }} onClick={(e)=> e.stopPropagation()}>
+            <div className="modal-header" style={{ position:'relative' }}>
+              <button aria-label="Close" onClick={() => setShowTravellersModal(false)} style={{ position:'absolute', left:0, top:0, width:40, height:40, background:'transparent', border:'none', color:'#fff', fontSize:22, cursor:'pointer' }}>×</button>
+              <h3>Travelers, Class, Stops & Currency</h3>
+            </div>
+            
+            <div style={{ padding: '20px' }}>
+              <div ref={paxRef} className="travellers-row">
+                <div className="travellers-label">
+                  <div>Adults</div>
+                  <div className="travellers-sublabel">Ages 12+</div>
+                </div>
+                <div className="counter">
+                  <button className="stepper" onClick={()=>setAdults(Math.max(1, adults-1))}>−</button>
+                  <div className="counter-value">{adults}</div>
+                  <button className="stepper" onClick={()=>setAdults(adults+1)}>+</button>
+                </div>
+              </div>
+              {multiShow && multiActive?.idx === 1 && multiActive?.type === 'from' && multiSuggest.length > 0 && (
+                <div style={{ background: '#1f1f1f', border: '1px solid #333', borderRadius: 8, marginTop: -8 }}>
+                  {multiSuggest.map((s: any) => (
+                    <div key={s.id}
+                         onMouseDown={() => { 
+                           setMultiLegs(v => v.map((l, i) => i === 1 ? { ...l, from: `${s.code} · ${s.name}` } : l)); 
+                           setMultiLegIds(v => v.map((l, i) => i === 1 ? { ...l, fromId: s.id } : l)); 
+                           setMultiShow(false); 
+                         }}
+                         style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+                      <span>{s.code} · {s.name}</span>
+                      <span style={{ color: '#aaa' }}>{s.cityName}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="travellers-row">
+                <div className="travellers-label">
+                  <div>Child{childrenCount === 1 ? '' : 'ren'}</div>
+                  <div className="travellers-sublabel">Ages 2–11</div>
+                </div>
+                <div className="counter">
+                  <button className="stepper" onClick={()=>setChildrenCount(Math.max(0, childrenCount-1))}>−</button>
+                  <div className="counter-value">{childrenCount}</div>
+                  <button className="stepper" onClick={()=>setChildrenCount(childrenCount+1)}>+</button>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '20px' }}>
+                <label style={{ color: 'white', fontSize: '16px', fontWeight: '500', marginBottom: '10px', display: 'block' }}>Class</label>
+                <div className="radio-list">
+                  {['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST'].map(cls => (
+                    <label key={cls} className="radio-item">
+                      <span style={{ color: 'white' }}>{cls.replace('_', ' ')}</span>
+                      <div className={`radio-dot ${cabinClass === cls ? 'active' : ''}`}>
+                        {cabinClass === cls && <div style={{ width: 8, height: 8, background: 'white', borderRadius: '50%', margin: 'auto' }}></div>}
+                      </div>
+                      <input type="radio" name="class" value={cls} checked={cabinClass === cls} onChange={(e)=>setCabinClass(e.target.value as any)} style={{ display: 'none' }} />
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div ref={currencyRef} style={{ marginTop: '20px' }}>
+                <button onClick={()=> setOpenCurrency(v=>!v)} style={{ width:'100%', textAlign:'left', padding:'12px 14px', background:'#2a2a2a', border:'1px solid #444', borderRadius:8, color:'#fff' }}>
+                  Currency {openCurrency ? '▲' : '▼'}
+                </button>
+                {openCurrency && (
+                  <div style={{ marginTop:10 }}>
+                    <input
+                      value={currencyFilter}
+                      onChange={(e)=> setCurrencyFilter(e.target.value)}
+                      placeholder="Search currency (e.g., USD, EUR)"
+                      style={{ width:'100%', padding:'10px 12px', border:'1px solid #555', borderRadius:8, background:'transparent', color:'#fff' }}
+                    />
+                    <div style={{ marginTop:12, display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8 }}>
+                      {currencyOptions.filter(c => c.toLowerCase().includes(currencyFilter.trim().toLowerCase())).map(c => (
+                        <button key={c} onClick={()=> setCurrency(c)}
+                                style={{ padding:'10px 12px', border:'1px solid ' + (currency===c?'#0071c2':'#444'), borderRadius:8, background: currency===c? '#0a64a4':'#2a2a2a', color:'#fff', textAlign:'left' }}>
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div ref={stopsRef} style={{ marginTop:'20px' }}>
+                <button onClick={()=> setOpenStops(v=>!v)} style={{ width:'100%', textAlign:'left', padding:'12px 14px', background:'#2a2a2a', border:'1px solid #444', borderRadius:8, color:'#fff' }}>
+                  Stops {openStops ? '▲' : '▼'}
+                </button>
+                {openStops && (
+                  <div className="radio-list" style={{ marginTop:10 }}>
+                    {[
+                      { value: '0', label: 'Non-stop' },
+                      { value: '1', label: 'Up to 1 stop' },
+                      { value: '2', label: 'Up to 2 stops' }
+                    ].map(option => (
+                      <label key={option.value} className="radio-item">
+                        <span style={{ color: 'white' }}>{option.label}</span>
+                        <div className={`radio-dot ${stops === option.value ? 'active' : ''}`}>
+                          {stops === option.value && <div style={{ width: 8, height: 8, background: 'white', borderRadius: '50%', margin: 'auto' }}></div>}
+                        </div>
+                        <input type="radio" name="stops" value={option.value} checked={stops === option.value} onChange={(e)=>setStops(e.target.value as any)} style={{ display: 'none' }} />
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button className="done-button" onClick={()=> setShowTravellersModal(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* old separate modals removed; moved into travellers modal */}
+
+        {/* Car Rental Form */}
+        {activeTab === 'car' && (
+          <div className="search-card">
+            <div className="search-field" style={{ paddingTop: '16px', paddingBottom: '16px' }}>
+              <ToggleSwitch 
+                checked={returnToSameLocation}
+                onChange={setReturnToSameLocation}
+                label="Return to same location"
+              />
+            </div>
+            <div className="search-field">
+              <CarIcon />
+              <div className="search-field-content">
+                <div className="search-field-label">Pickup location</div>
+              </div>
+            </div>
+            <div className="search-field">
+              <CalendarIcon />
+              <div className="search-field-content">
+                <div className="search-field-label">25 Sep at 10:00–27 Sep at 10:00</div>
+              </div>
+            </div>
+            <div className="search-field">
+              <PersonIcon />
+              <div className="search-field-content">
+                <div className="search-field-label">Driver's age: 30–65</div>
+              </div>
+            </div>
+            <button className="search-button" onClick={handleSearch}>Search</button>
+          </div>
+        )}
+
+        {/* Flights Form */}
+        {activeTab === 'flights' && (
+          <div className="search-card">
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
+              <RadioButton 
+                checked={flightType === 'round-trip'}
+                onChange={() => setFlightType('round-trip')}
+                label="Round-trip"
+              />
+              <RadioButton 
+                checked={flightType === 'one-way'}
+                onChange={() => setFlightType('one-way')}
+                label="One-way"
+              />
+              <RadioButton 
+                checked={flightType === 'multi-city'}
+                onChange={() => setFlightType('multi-city')}
+                label="Multi-city"
+              />
+            </div>
+            
+            {flightType !== 'multi-city' && (
+            <div className="search-field">
+              <FlightIcon />
+              <div className="search-field-content">
+                <input
+                  type="text"
+                  value={fromCity}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setFromCity(v);
+                    setFromSelectedId('');
+                    setShowFromDropdown(true);
+                    clearTimeout(debounceRef.current);
+                    debounceRef.current = setTimeout(async () => {
+                      if (v.trim().length < 2) { setFromSuggestions([]); return; }
+                      try {
+                        const results = await searchAirports(v.trim());
+                        const city = results.find((r: any) => r.type === 'CITY');
+                        const airports = results.filter((r: any) => r.type === 'AIRPORT').slice(0, 6);
+                        setFromSuggestions(city ? [city, ...airports] : airports);
+                      } catch { setFromSuggestions([]); }
+                    }, 200);
+                  }}
+                  placeholder="Where from?"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    outline: 'none',
+                    color: 'white',
+                    fontSize: '16px',
+                    width: '100%'
+                  }}
+                  onFocus={() => setShowFromDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowFromDropdown(false), 150)}
+                />
+              </div>
+            </div>
+            )}
+            {showFromDropdown && fromSuggestions.length > 0 && (
+              <div style={{ background: '#1f1f1f', border: '1px solid #333', borderRadius: 8, marginTop: -8 }}>
+                {fromSuggestions.map((s: any) => {
+                  const isCity = s.type === 'CITY';
+                  const primary = isCity ? `${s.cityName || s.name} · All airports` : `${s.code} · ${s.name}`;
+                  const secondary = isCity ? (s.countryName || '') : (s.cityName || '');
+                  return (
+                    <div key={s.id}
+                         onMouseDown={() => { setFromSelectedId(s.id); setFromCity(primary); setShowFromDropdown(false); }}
+                         style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+                      <span>{primary}</span>
+                      <span style={{ color: '#aaa' }}>{secondary}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            
+            {flightType !== 'multi-city' && (
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
+              <button 
+                onClick={swapCities}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '8px'
+                }}
+              >
+                <SwapIcon />
+        </button>
+            </div>
+            )}
+            
+            {flightType !== 'multi-city' && (
+            <div className="search-field">
+              <FlightIcon />
+              <div className="search-field-content">
+                <input
+                  type="text"
+                  value={toCity}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setToCity(v);
+                    setToSelectedId('');
+                    setShowToDropdown(true);
+                    clearTimeout(debounceRef.current);
+                    debounceRef.current = setTimeout(async () => {
+                      if (v.trim().length < 2) { setToSuggestions([]); return; }
+                      try {
+                        const results = await searchAirports(v.trim());
+                        const city = results.find((r: any) => r.type === 'CITY');
+                        const airports = results.filter((r: any) => r.type === 'AIRPORT').slice(0, 6);
+                        setToSuggestions(city ? [city, ...airports] : airports);
+                      } catch { setToSuggestions([]); }
+                    }, 200);
+                  }}
+                  placeholder="Where to?"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    outline: 'none',
+                    color: 'white',
+                    fontSize: '16px',
+                    width: '100%'
+                  }}
+                  onFocus={() => setShowToDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowToDropdown(false), 150)}
+                />
+              </div>
+            </div>
+            )}
+            {showToDropdown && toSuggestions.length > 0 && (
+              <div style={{ background: '#1f1f1f', border: '1px solid #333', borderRadius: 8, marginTop: -8 }}>
+                {toSuggestions.map((s: any) => {
+                  const isCity = s.type === 'CITY';
+                  const primary = isCity ? `${s.cityName || s.name} · All airports` : `${s.code} · ${s.name}`;
+                  const secondary = isCity ? (s.countryName || '') : (s.cityName || '');
+                  return (
+                    <div key={s.id}
+                         onMouseDown={() => { setToSelectedId(s.id); setToCity(primary); setShowToDropdown(false); }}
+                         style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+                      <span>{primary}</span>
+                      <span style={{ color: '#aaa' }}>{secondary}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            
+            {flightType !== 'multi-city' && (
+            <div className="search-field" onClick={() => {
+              setShowDatePickerModal(true);
+              setDateFieldType('departure');
+            }}>
+              <CalendarIcon />
+              <div className="search-field-content">
+                <div style={{ color: 'white', fontSize: '16px', cursor: 'pointer' }}>
+                  {departDate 
+                    ? (flightType === 'round-trip' 
+                        ? formatDateRange(departDate, returnDate) 
+                        : formatDate(departDate))
+                    : 'When?'}
+                </div>
+              </div>
+            </div>
+            )}
+            
+            {flightType === 'multi-city' && (
+              <div style={{ position: 'relative' }}>
+                {/* Первый рейс */}
+                <div className="multi-flight-block">
+                
+                <div className="search-field">
+                  <FlightIcon />
+                  <div className="search-field-content">
+                    <input
+                      type="text"
+                      value={multiLegs[0]?.from || ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setMultiLegs(x => x.map((l, i) => i === 0 ? { ...l, from: v } : l));
+                        setMultiActive({ idx: 0, type: 'from' });
+                        setMultiShow(true);
+                        clearTimeout(multiDebounceRef.current);
+                        multiDebounceRef.current = setTimeout(async () => {
+                          if (v.trim().length < 2) { setMultiSuggest([]); return; }
+                          try {
+                            const results = await searchAirports(v.trim());
+                            setMultiSuggest(results.filter((r: any) => r.type === 'AIRPORT').slice(0, 6));
+                          } catch { setMultiSuggest([]); }
+                        }, 200);
+                      }}
+                      placeholder="Where from?"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        color: 'white',
+                        fontSize: '16px',
+                        width: '100%'
+                      }}
+                      onFocus={() => { setMultiActive({ idx: 0, type: 'from' }); setMultiShow(true); }}
+                      onBlur={() => setTimeout(() => setMultiShow(false), 150)}
+                    />
+                  </div>
+                </div>
+                {multiShow && multiActive?.idx === 0 && multiActive?.type === 'from' && multiSuggest.length > 0 && (
+                  <div style={{ background: '#1f1f1f', border: '1px solid #333', borderRadius: 8, marginTop: -8 }}>
+                    {multiSuggest.map((s: any) => (
+                      <div key={s.id}
+                           onMouseDown={() => { 
+                             setMultiLegs(v => v.map((l, i) => i === 0 ? { ...l, from: `${s.code} · ${s.name}` } : l)); 
+                             setMultiLegIds(v => v.map((l, i) => i === 0 ? { ...l, fromId: s.id } : l)); 
+                             setMultiShow(false); 
+                           }}
+                           style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+                        <span>{s.code} · {s.name}</span>
+                        <span style={{ color: '#aaa' }}>{s.cityName}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="search-field">
+                  <FlightIcon />
+                  <div className="search-field-content">
+                    <input
+                      type="text"
+                      value={multiLegs[0]?.to || ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setMultiLegs(x => x.map((l, i) => i === 0 ? { ...l, to: v } : l));
+                        setMultiActive({ idx: 0, type: 'to' });
+                        setMultiShow(true);
+                        clearTimeout(multiDebounceRef.current);
+                        multiDebounceRef.current = setTimeout(async () => {
+                          if (v.trim().length < 2) { setMultiSuggest([]); return; }
+                          try {
+                            const results = await searchAirports(v.trim());
+                            setMultiSuggest(results.filter((r: any) => r.type === 'AIRPORT').slice(0, 6));
+                          } catch { setMultiSuggest([]); }
+                        }, 200);
+                      }}
+                      placeholder="Where to?"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        color: 'white',
+                        fontSize: '16px',
+                        width: '100%'
+                      }}
+                      onFocus={() => { setMultiActive({ idx: 0, type: 'to' }); setMultiShow(true); }}
+                      onBlur={() => setTimeout(() => setMultiShow(false), 150)}
+                    />
+                  </div>
+                </div>
+                {multiShow && multiActive?.idx === 0 && multiActive?.type === 'to' && multiSuggest.length > 0 && (
+                  <div style={{ background: '#1f1f1f', border: '1px solid #333', borderRadius: 8, marginTop: -8 }}>
+                    {multiSuggest.map((s: any) => (
+                      <div key={s.id}
+                           onMouseDown={() => { 
+                             setMultiLegs(v => v.map((l, i) => i === 0 ? { ...l, to: `${s.code} · ${s.name}` } : l)); 
+                             setMultiLegIds(v => v.map((l, i) => i === 0 ? { ...l, toId: s.id } : l)); 
+                             setMultiShow(false); 
+                           }}
+                           style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+                        <span>{s.code} · {s.name}</span>
+                        <span style={{ color: '#aaa' }}>{s.cityName}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Дата */}
+                <div className="search-field" onClick={() => {
+                  setShowDatePickerModal(true);
+                  setActiveLegIndex(0);
+                }}>
+                  <CalendarIcon />
+                  <div className="search-field-content">
+                    <div style={{ color: 'white', fontSize: '16px', cursor: 'pointer' }}>
+                      {multiLegs[0]?.date ? formatDate(multiLegs[0].date) : 'When?'}
+                    </div>
+                  </div>
+                </div>
+                </div>
+
+                {/* Второй рейс */}
+                <div className="multi-flight-block">
+                
+                <div className="search-field">
+                  <FlightIcon />
+                  <div className="search-field-content">
+                    <input
+                      type="text"
+                      value={multiLegs[1]?.from || ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setMultiLegs(x => x.map((l, i) => i === 1 ? { ...l, from: v } : l));
+                        setMultiActive({ idx: 1, type: 'from' });
+                        setMultiShow(true);
+                        clearTimeout(multiDebounceRef.current);
+                        multiDebounceRef.current = setTimeout(async () => {
+                          if (v.trim().length < 2) { setMultiSuggest([]); return; }
+                          try {
+                            const results = await searchAirports(v.trim());
+                            setMultiSuggest(results.filter((r: any) => r.type === 'AIRPORT').slice(0, 6));
+                          } catch { setMultiSuggest([]); }
+                        }, 200);
+                      }}
+                      placeholder="Where from?"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        color: 'white',
+                        fontSize: '16px',
+                        width: '100%'
+                      }}
+                      onFocus={() => { setMultiActive({ idx: 1, type: 'from' }); setMultiShow(true); }}
+                      onBlur={() => setTimeout(() => setMultiShow(false), 150)}
+                    />
+                  </div>
+                </div>
+                {multiShow && multiActive?.idx === 1 && multiActive?.type === 'from' && multiSuggest.length > 0 && (
+                  <div style={{ background: '#1f1f1f', border: '1px solid #333', borderRadius: 8, marginTop: -8 }}>
+                    {multiSuggest.map((s: any) => (
+                      <div key={s.id}
+                           onMouseDown={() => { 
+                             setMultiLegs(v => v.map((l, i) => i === 1 ? { ...l, from: `${s.code} · ${s.name}` } : l)); 
+                             setMultiLegIds(v => v.map((l, i) => i === 1 ? { ...l, fromId: s.id } : l)); 
+                             setMultiShow(false); 
+                           }}
+                           style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+                        <span>{s.code} · {s.name}</span>
+                        <span style={{ color: '#aaa' }}>{s.cityName}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="search-field">
+                  <FlightIcon />
+                  <div className="search-field-content">
+                    <input
+                      type="text"
+                      value={multiLegs[1]?.to || ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setMultiLegs(x => x.map((l, i) => i === 1 ? { ...l, to: v } : l));
+                        setMultiActive({ idx: 1, type: 'to' });
+                        setMultiShow(true);
+                        clearTimeout(multiDebounceRef.current);
+                        multiDebounceRef.current = setTimeout(async () => {
+                          if (v.trim().length < 2) { setMultiSuggest([]); return; }
+                          try {
+                            const results = await searchAirports(v.trim());
+                            setMultiSuggest(results.filter((r: any) => r.type === 'AIRPORT').slice(0, 6));
+                          } catch { setMultiSuggest([]); }
+                        }, 200);
+                      }}
+                      placeholder="Where to?"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        color: 'white',
+                        fontSize: '16px',
+                        width: '100%'
+                      }}
+                      onFocus={() => { setMultiActive({ idx: 1, type: 'to' }); setMultiShow(true); }}
+                      onBlur={() => setTimeout(() => setMultiShow(false), 150)}
+                    />
+                  </div>
+                </div>
+                {multiShow && multiActive?.idx === 1 && multiActive?.type === 'to' && multiSuggest.length > 0 && (
+                  <div style={{ background: '#1f1f1f', border: '1px solid #333', borderRadius: 8, marginTop: -8 }}>
+                    {multiSuggest.map((s: any) => (
+                      <div key={s.id}
+                           onMouseDown={() => { 
+                             setMultiLegs(v => v.map((l, i) => i === 1 ? { ...l, to: `${s.code} · ${s.name}` } : l)); 
+                             setMultiLegIds(v => v.map((l, i) => i === 1 ? { ...l, toId: s.id } : l)); 
+                             setMultiShow(false); 
+                           }}
+                           style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+                        <span>{s.code} · {s.name}</span>
+                        <span style={{ color: '#aaa' }}>{s.cityName}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Дата */}
+                <div className="search-field" onClick={() => {
+                  setShowDatePickerModal(true);
+                  setActiveLegIndex(1);
+                }}>
+                  <CalendarIcon />
+                  <div className="search-field-content">
+                    <div style={{ color: 'white', fontSize: '16px', cursor: 'pointer' }}>
+                      {multiLegs[1]?.date ? formatDate(multiLegs[1].date) : 'When?'}
+                    </div>
+                  </div>
+                </div>
+                </div>
+
+
+                {/* Третий рейс - добавим время */}
+                {multiLegs[2] && (
+                  <div className="multi-flight-block">
+                  
+                  {/* Кнопка удаления третьего рейса в левом верхнем углу */}
+                  <div className="remove-flight-container">
+                      <button 
+                        onClick={() => setMultiLegs(v => v.filter((_, i) => i !== 2))}
+                        className="remove-flight-btn"
+                        title="Remove flight"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  
+                  <div className="search-field">
+                    <FlightIcon />
+                    <div className="search-field-content">
+                      <input
+                        type="text"
+                        value={multiLegs[2]?.from || ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setMultiLegs(x => x.map((l, i) => i === 2 ? { ...l, from: v } : l));
+                          setMultiActive({ idx: 2, type: 'from' });
+                          setMultiShow(true);
+                          clearTimeout(multiDebounceRef.current);
+                          multiDebounceRef.current = setTimeout(async () => {
+                            if (v.trim().length < 2) { setMultiSuggest([]); return; }
+                            try {
+                              const results = await searchAirports(v.trim());
+                              setMultiSuggest(results.filter((r: any) => r.type === 'AIRPORT').slice(0, 6));
+                            } catch { setMultiSuggest([]); }
+                          }, 200);
+                        }}
+                        placeholder="Where from?"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          outline: 'none',
+                          color: 'white',
+                          fontSize: '16px',
+                          width: '100%'
+                        }}
+                        onFocus={() => { setMultiActive({ idx: 2, type: 'from' }); setMultiShow(true); }}
+                        onBlur={() => setTimeout(() => setMultiShow(false), 150)}
+                      />
+                    </div>
+                  </div>
+                  {multiShow && multiActive?.idx === 2 && multiActive?.type === 'from' && multiSuggest.length > 0 && (
+                    <div style={{ background: '#1f1f1f', border: '1px solid #333', borderRadius: 8, marginTop: -8 }}>
+                      {multiSuggest.map((s: any) => (
+                        <div key={s.id}
+                             onMouseDown={() => { 
+                               setMultiLegs(v => v.map((l, i) => i === 2 ? { ...l, from: `${s.code} · ${s.name}` } : l)); 
+                               setMultiLegIds(v => v.map((l, i) => i === 2 ? { ...l, fromId: s.id } : l)); 
+                               setMultiShow(false); 
+                             }}
+                             style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+                          <span>{s.code} · {s.name}</span>
+                          <span style={{ color: '#aaa' }}>{s.cityName}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="search-field">
+                    <FlightIcon />
+                    <div className="search-field-content">
+                      <input
+                        type="text"
+                        value={multiLegs[2]?.to || ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setMultiLegs(x => x.map((l, i) => i === 2 ? { ...l, to: v } : l));
+                          setMultiActive({ idx: 2, type: 'to' });
+                          setMultiShow(true);
+                          clearTimeout(multiDebounceRef.current);
+                          multiDebounceRef.current = setTimeout(async () => {
+                            if (v.trim().length < 2) { setMultiSuggest([]); return; }
+                            try {
+                              const results = await searchAirports(v.trim());
+                              setMultiSuggest(results.filter((r: any) => r.type === 'AIRPORT').slice(0, 6));
+                            } catch { setMultiSuggest([]); }
+                          }, 200);
+                        }}
+                        placeholder="Where to?"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          outline: 'none',
+                          color: 'white',
+                          fontSize: '16px',
+                          width: '100%'
+                        }}
+                        onFocus={() => { setMultiActive({ idx: 2, type: 'to' }); setMultiShow(true); }}
+                        onBlur={() => setTimeout(() => setMultiShow(false), 150)}
+                      />
+                    </div>
+                  </div>
+                  {multiShow && multiActive?.idx === 2 && multiActive?.type === 'to' && multiSuggest.length > 0 && (
+                    <div style={{ background: '#1f1f1f', border: '1px solid #333', borderRadius: 8, marginTop: -8 }}>
+                      {multiSuggest.map((s: any) => (
+                        <div key={s.id}
+                             onMouseDown={() => { 
+                               setMultiLegs(v => v.map((l, i) => i === 2 ? { ...l, to: `${s.code} · ${s.name}` } : l)); 
+                               setMultiLegIds(v => v.map((l, i) => i === 2 ? { ...l, toId: s.id } : l)); 
+                               setMultiShow(false); 
+                             }}
+                             style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+                          <span>{s.code} · {s.name}</span>
+                          <span style={{ color: '#aaa' }}>{s.cityName}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Дата */}
+                  <div className="search-field" onClick={() => {
+                    setShowDatePickerModal(true);
+                    setActiveLegIndex(2);
+                  }}>
+                    <CalendarIcon />
+                    <div className="search-field-content">
+                      <div style={{ color: 'white', fontSize: '16px', cursor: 'pointer' }}>
+                        {multiLegs[2]?.date ? formatDate(multiLegs[2].date) : 'When?'}
+                      </div>
+                    </div>
+                  </div>
+                  </div>
+                )}
+                
+
+                {/* Четвертый рейс */}
+                {multiLegs[3] && (
+                  <div className="multi-flight-block">
+                  
+                  {/* Кнопка удаления четвертого рейса в левом верхнем углу */}
+                  <div className="remove-flight-container">
+                    <button 
+                      onClick={() => setMultiLegs(v => v.filter((_, i) => i !== 3))}
+                      className="remove-flight-btn"
+                      title="Remove flight"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  
+                  <div className="search-field">
+                    <FlightIcon />
+                    <div className="search-field-content">
+                      <input
+                        type="text"
+                        value={multiLegs[3]?.from || ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setMultiLegs(x => x.map((l, i) => i === 3 ? { ...l, from: v } : l));
+                          setMultiActive({ idx: 3, type: 'from' });
+                          setMultiShow(true);
+                          clearTimeout(multiDebounceRef.current);
+                          multiDebounceRef.current = setTimeout(async () => {
+                            if (v.trim().length < 2) { setMultiSuggest([]); return; }
+                            try {
+                              const results = await searchAirports(v.trim());
+                              setMultiSuggest(results.filter((r: any) => r.type === 'AIRPORT').slice(0, 6));
+                            } catch { setMultiSuggest([]); }
+                          }, 200);
+                        }}
+                        placeholder="Where from?"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          outline: 'none',
+                          color: 'white',
+                          fontSize: '16px',
+                          width: '100%'
+                        }}
+                      onFocus={() => { setMultiActive({ idx: 3, type: 'from' }); setMultiShow(true); }}
+                      onBlur={() => setTimeout(() => setMultiShow(false), 150)}
+                      />
+                    </div>
+                  </div>
+                  {multiShow && multiActive?.idx === 3 && multiActive?.type === 'from' && multiSuggest.length > 0 && (
+                    <div style={{ background: '#1f1f1f', border: '1px solid #333', borderRadius: 8, marginTop: -8 }}>
+                      {multiSuggest.map((s: any) => (
+                        <div key={s.id}
+                             onMouseDown={() => { 
+                               setMultiLegs(v => v.map((l, i) => i === 3 ? { ...l, from: `${s.code} · ${s.name}` } : l)); 
+                               setMultiLegIds(v => v.map((l, i) => i === 3 ? { ...l, fromId: s.id } : l)); 
+                               setMultiShow(false); 
+                             }}
+                             style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+                          <span>{s.code} · {s.name}</span>
+                          <span style={{ color: '#aaa' }}>{s.cityName}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="search-field">
+                    <FlightIcon />
+                    <div className="search-field-content">
+                      <input
+                        type="text"
+                        value={multiLegs[3]?.to || ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setMultiLegs(x => x.map((l, i) => i === 3 ? { ...l, to: v } : l));
+                          setMultiActive({ idx: 3, type: 'to' });
+                          setMultiShow(true);
+                          clearTimeout(multiDebounceRef.current);
+                          multiDebounceRef.current = setTimeout(async () => {
+                            if (v.trim().length < 2) { setMultiSuggest([]); return; }
+                            try {
+                              const results = await searchAirports(v.trim());
+                              setMultiSuggest(results.filter((r: any) => r.type === 'AIRPORT').slice(0, 6));
+                            } catch { setMultiSuggest([]); }
+                          }, 200);
+                        }}
+                        placeholder="Where to?"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          outline: 'none',
+                          color: 'white',
+                          fontSize: '16px',
+                          width: '100%'
+                        }}
+                        onFocus={() => { setMultiActive({ idx: 3, type: 'to' }); setMultiShow(true); }}
+                        onBlur={() => setTimeout(() => setMultiShow(false), 150)}
+                      />
+                    </div>
+                  </div>
+
+                  {multiShow && multiActive?.idx === 3 && multiActive?.type === 'to' && multiSuggest.length > 0 && (
+                    <div style={{ background: '#1f1f1f', border: '1px solid #333', borderRadius: 8, marginTop: -8 }}>
+                      {multiSuggest.map((s: any) => (
+                        <div key={s.id}
+                             onMouseDown={() => { 
+                               setMultiLegs(v => v.map((l, i) => i === 3 ? { ...l, to: `${s.code} · ${s.name}` } : l)); 
+                               setMultiLegIds(v => v.map((l, i) => i === 3 ? { ...l, toId: s.id } : l)); 
+                               setMultiShow(false); 
+                             }}
+                             style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+                          <span>{s.code} · {s.name}</span>
+                          <span style={{ color: '#aaa' }}>{s.cityName}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Дата */}
+                  <div className="search-field" onClick={() => {
+                    setShowDatePickerModal(true);
+                    setActiveLegIndex(3);
+                  }}>
+                    <CalendarIcon />
+                    <div className="search-field-content">
+                      <div style={{ color: 'white', fontSize: '16px', cursor: 'pointer' }}>
+                        {multiLegs[3]?.date ? formatDate(multiLegs[3].date) : 'When?'}
+                      </div>
+                    </div>
+                  </div>
+                  </div>
+                )}
+
+                {/* Кнопка добавления рейса */}
+                <div className="add-flight-section">
+                  <button 
+                    onClick={() => setMultiLegs(v => [...v, { from: '', to: '', date: '' }])}
+                    className="add-flight-button"
+                  >
+                    + Add a flight
+                  </button>
+                </div>
+              </div>
+            )}
+            
+      <div className="search-field">
+              <PersonIcon />
+              <div className="search-field-content" onClick={() => { setTravellersModalSection('pax'); setShowTravellersModal(true); }} style={{ cursor: 'pointer' }}>
+                <div style={{ color: 'white', fontSize: '16px' }}>{travellersSummary}</div>
+              </div>
+            </div>
+      {searchError && (
+        <div style={{ color:'#ff6b6b', fontSize: 14, margin: '8px 0 0 8px' }}>{searchError}</div>
+      )}
+            <button className="search-button" onClick={handleSearch}>Search</button>
+          </div>
+        )}
+        
+        {/* Continue Search removed by request */}
+      </div>
+
+      {/* Hero tagline - сразу после search */}
+      <div className="home-hero">
+        <h2 className="hero-title">Find your next trip</h2>
+        <p className="hero-sub">Search flights, stays and cars in one place</p>
+      </div>
+
+      {/* Continue your search - под героем */}
+      {(() => {
+        try {
+          const raw = sessionStorage.getItem('flightResults_last_url')
+            || localStorage.getItem('flightResults_last_url')
+            || '';
+          if (!raw) return null;
+          const params = new URLSearchParams(raw);
+          const fromCode = (params.get('from') || '').split('.')[0];
+          const toCode = (params.get('to') || '').split('.')[0];
+          const departDate = params.get('departDate') || '';
+          const adults = params.get('adults') || '1';
+          const children = params.get('children') || '';
+          if (!fromCode || !toCode) return null;
+          const childrenCount = children ? children.split(',').filter(Boolean).length : 0;
+          const travellers = parseInt(adults) + childrenCount;
+          return (
+            <div className="continue-search-section" key={`cs_${lastSearchVersion}`}>
+              <h2 className="section-title">Continue your search</h2>
+              <div
+                className="search-history-card"
+                onClick={() => { window.location.href = `/flight-results?${raw}`; }}
+              >
+                <img src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=120&h=120&fit=crop" alt="Flight" />
+                <div className="search-history-content">
+                  <div className="search-history-route">
+                    <span className="search-history-from">{fromCode}</span>
+                    <svg width="20" height="20" fill="#0071c2" viewBox="0 0 24 24" style={{ margin: '0 8px' }}>
+                      <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>
+                    </svg>
+                    <span className="search-history-to">{toCode}</span>
+                  </div>
+                  <div className="search-history-details">
+                    {departDate && new Date(departDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, {travellers} traveller{travellers > 1 ? 's' : ''}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        } catch {
+          return null;
+        }
+      })()}
+
+      {/* Popular Destinations */}
+      {activeTab === 'flights' && (
+        <>
+          <div className="destinations-section">
+            <h2 className="section-title">Trending destinations</h2>
+            <p className="section-subtitle">Most popular routes this month</p>
+            
+            <div className="destinations-grid">
+              <div className="destination-card large" onClick={() => {
+                setFromCity('');
+                setToCity('MAD · MADRID BARAJAS AIRPORT');
+                setToSelectedId('MAD.AIRPORT');
+                setActiveTab('flights');
+                scrollToSearch();
+              }}>
+                <img src="https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=600&h=400&fit=crop" alt="Madrid" />
+                <div className="destination-overlay">
+                  <h3 className="destination-name">Madrid</h3>
+                  <p className="destination-desc">Spain</p>
+                </div>
+              </div>
+              
+              <div className="destination-card" onClick={() => {
+                setFromCity('');
+                setToCity('DXB · DUBAI INTERNATIONAL AIRPORT');
+                setToSelectedId('DXB.AIRPORT');
+                setActiveTab('flights');
+                scrollToSearch();
+              }}>
+                <img src="https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=400&h=300&fit=crop" alt="Dubai" />
+                <div className="destination-overlay">
+                  <h3 className="destination-name">Dubai</h3>
+                  <p className="destination-desc">United Arab Emirates</p>
+                </div>
+              </div>
+              
+              <div className="destination-card" onClick={() => {
+                setFromCity('');
+                setToCity('CDG · PARIS CHARLES DE GAULLE AIRPORT');
+                setToSelectedId('CDG.AIRPORT');
+                setActiveTab('flights');
+                scrollToSearch();
+              }}>
+                <img src="https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400&h=300&fit=crop" alt="Paris" />
+                <div className="destination-overlay">
+                  <h3 className="destination-name">Paris</h3>
+                  <p className="destination-desc">France</p>
+                </div>
+              </div>
+              
+              <div className="destination-card" onClick={() => {
+                setFromCity('');
+                setToCity('NRT · TOKYO NARITA INTERNATIONAL AIRPORT');
+                setToSelectedId('NRT.AIRPORT');
+                setActiveTab('flights');
+                scrollToSearch();
+              }}>
+                <img src="https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400&h=300&fit=crop" alt="Tokyo" />
+                <div className="destination-overlay">
+                  <h3 className="destination-name">Tokyo</h3>
+                  <p className="destination-desc">Japan</p>
+                </div>
+              </div>
+              
+              <div className="destination-card" onClick={() => {
+                setFromCity('');
+                setToCity('JFK · NEW YORK JOHN F KENNEDY AIRPORT');
+                setToSelectedId('JFK.AIRPORT');
+                setActiveTab('flights');
+                scrollToSearch();
+              }}>
+                <img src="https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400&h=300&fit=crop" alt="New York" />
+                <div className="destination-overlay">
+                  <h3 className="destination-name">New York</h3>
+                  <p className="destination-desc">United States</p>
+                </div>
+              </div>
+              
+              <div className="destination-card" onClick={() => {
+                setFromCity('');
+                setToCity('SYD · SYDNEY KINGSFORD SMITH AIRPORT');
+                setToSelectedId('SYD.AIRPORT');
+                setActiveTab('flights');
+                scrollToSearch();
+              }}>
+                <img src="https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=400&h=300&fit=crop" alt="Sydney" />
+                <div className="destination-overlay">
+                  <h3 className="destination-name">Sydney</h3>
+                  <p className="destination-desc">Australia</p>
+                </div>
+              </div>
+              
+              <div className="destination-card" onClick={() => {
+                setFromCity('');
+                setToCity('DPS · NGURAH RAI INTERNATIONAL AIRPORT');
+                setToSelectedId('DPS.AIRPORT');
+                setActiveTab('flights');
+                scrollToSearch();
+              }}>
+                <img src="https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400&h=300&fit=crop" alt="Bali" />
+                <div className="destination-overlay">
+                  <h3 className="destination-name">Bali</h3>
+                  <p className="destination-desc">Indonesia</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Offers Section */}
+          <div className="offers-section">
+            <h2 className="section-title">Offers</h2>
+            <p className="section-subtitle">Promotions, deals, and special offers for you</p>
+            
+            <div className="offers-grid">
+              <div className="offer-card">
+                <img src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=600&h=300&fit=crop" alt="Travel deals" />
+                <div className="offer-content">
+                  <h3 className="offer-title">Fly away to your dream holiday</h3>
+                  <p className="offer-desc">Get inspired, compare and book flights with more flexibility</p>
+                  <button className="offer-button" onClick={scrollToSearch}>Search for flights</button>
+                </div>
+              </div>
+              
+              <div className="offer-card">
+                <img src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&h=300&fit=crop" alt="Last minute" />
+                <div className="offer-content">
+                  <h3 className="offer-title">Save on domestic flights</h3>
+                  <p className="offer-desc">Book your next adventure and explore new destinations</p>
+                  <button className="offer-button" onClick={scrollToSearch}>Find deals</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+    </>
+  )}
+
+      {/* Sign In Section */}
+      {/* Sign-in promo removed by request */}
+
+      {/* Continue Search removed by request */}
+
+      {/* Date Picker Modal */}
+      <DatePickerModal
+        isOpen={showDatePickerModal}
+        onClose={() => setShowDatePickerModal(false)}
+        onDateSelect={(departDateSelected, returnDateSelected) => {
+          if (flightType === 'multi-city') {
+            // Для multi-city обновляем дату конкретного б区块
+            setMultiLegs(v => v.map((leg, i) => i === activeLegIndex ? { ...leg, date: departDateSelected } : leg));
+          } else {
+            // Для обычных рейсов используем старую логику
+            setDepartDate(departDateSelected);
+            if (flightType === 'round-trip' && returnDateSelected) {
+              setReturnDate(returnDateSelected);
+            }
+          }
+        }}
+        departDate={flightType === 'multi-city' ? (multiLegs[activeLegIndex]?.date || '') : departDate}
+        returnDate={returnDate}
+        flightType={flightType as 'round-trip' | 'one-way' | 'multi-city'}
+        fieldType={dateFieldType}
+      />
+
+      {/* Stays Date Picker Modal */}
+      <DatePickerModal
+        isOpen={showStaysDatePicker}
+        onClose={() => setShowStaysDatePicker(false)}
+        onDateSelect={handleStaysDateSelect}
+        departDate={staysCheckIn}
+        returnDate={staysCheckOut}
+        flightType="round-trip"
+        fieldType="departure"
+      />
+
+      {/* Stays Guests & Rooms Modal */}
+      <GuestsRoomsModal
+        isOpen={showStaysGuestsModal}
+        onClose={() => setShowStaysGuestsModal(false)}
+        initialRooms={staysRooms}
+        initialAdults={staysAdults}
+        initialChildren={staysChildren}
+        onApply={handleStaysGuestsApply}
+      />
+
+      {/* Bottom Navigation */}
+      <nav className="bottom-nav">
+        <div className="bottom-nav-item active" onClick={() => navigate('/')}>
+          <SearchNavIcon />
+          <span className="bottom-nav-label">Search</span>
+        </div>
+        <div className="bottom-nav-item" onClick={() => navigate('/bookings')}>
+          <BookingsNavIcon />
+          <span className="bottom-nav-label">Bookings</span>
+        </div>
+        <div className="bottom-nav-item">
+          <SignInNavIcon />
+          <span className="bottom-nav-label">Sign in</span>
+        </div>
+      </nav>
+      
+      {/* Кнопка назад в FlightResults */}
+      {navigationType === 'back' && (
+        <div style={{ padding: '10px', textAlign: 'center' }}>
+          <span style={{ color: '#0071c2', cursor: 'pointer' }} onClick={() => navigate('/')}>
+            ← Back to search
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Splash Screen Component
+const SplashScreen = ({ isVisible }: { isVisible: boolean }) => {
+  if (!isVisible) return null;
+  
+  return (
+    <div className={`splash-screen ${!isVisible ? 'fade-out' : ''}`}>
+      <div className="splash-content">
+        <div className="splash-logo">Booking.com</div>
+      </div>
+    </div>
+  );
+};
+
+// Main App component with routing
+const App = () => {
+  // Check if this is the first load in this session
+  const [showSplash, setShowSplash] = React.useState(() => {
+    // Check sessionStorage to see if the app has already been loaded
+    const hasLoadedBefore = sessionStorage.getItem('app_has_loaded');
+    return !hasLoadedBefore; // Show splash only if not loaded before
+  });
+
+  React.useEffect(() => {
+    if (showSplash) {
+      // Mark that the app has been loaded in this session
+      sessionStorage.setItem('app_has_loaded', 'true');
+      
+      // Hide splash screen after 2.5 seconds
+      const timer = setTimeout(() => {
+        setShowSplash(false);
+      }, 2500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [showSplash]);
+
+  return (
+    <>
+      <SplashScreen isVisible={showSplash} />
+      <div className={showSplash ? 'app-hidden' : 'app-visible'}>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/bookings" element={<BookingsPage />} />
+          <Route path="/hotel-results" element={<HotelResults />} />
+          <Route path="/hotel-details" element={<HotelDetails />} />
+          <Route path="/flight-results" element={<FlightResults onBack={() => window.history.back()} />} />
+          <Route path="/flight-results-multi" element={<FlightResultsMulti onBack={() => window.history.back()} />} />
+      <Route path="/flight-detail/:id" element={
+        <RouteGuard requireOffer={true}>
+          <FlightDetail onBack={() => window.history.back()} />
+        </RouteGuard>
+      } />
+      <Route path="/ticket-type" element={
+        <RouteGuard requireOffer={true}>
+          <TicketType />
+        </RouteGuard>
+      } />
+      <Route path="/seat-selection" element={
+        <RouteGuard requireOffer={true}>
+          <SeatSelection />
+        </RouteGuard>
+      } />
+      <Route path="/seat-map" element={
+        <RouteGuard requireOffer={true}>
+          <SeatMap />
+        </RouteGuard>
+      } />
+      <Route path="/luggage" element={
+        <RouteGuard requireOffer={true}>
+          <Luggage />
+        </RouteGuard>
+      } />
+      <Route path="/details-hub" element={
+        <RouteGuard requireOffer={true} requireFlow={true}>
+          <DetailsHub />
+        </RouteGuard>
+      } />
+      <Route path="/traveler-details" element={
+        <RouteGuard requireOffer={true} requireFlow={true}>
+          <TravelerDetails />
+        </RouteGuard>
+      } />
+      <Route path="/contact-details" element={
+        <RouteGuard requireOffer={true} requireFlow={true}>
+          <ContactDetails />
+        </RouteGuard>
+      } />
+      <Route path="/payment" element={
+        <RouteGuard requireOffer={true} requireFlow={true}>
+          <Payment />
+        </RouteGuard>
+      } />
+      <Route path="/payment/new-card" element={
+        <RouteGuard requireOffer={true} requireFlow={true}>
+          <NewCard />
+        </RouteGuard>
+      } />
+        </Routes>
+      </div>
+    </>
+  );
+};
+
+export default App;

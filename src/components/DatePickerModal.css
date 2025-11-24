@@ -1,0 +1,440 @@
+/* DatePickerModal стили в стиле Booking.com */
+
+.date-picker-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 10000;
+  /* Ensure it's above all other elements */
+  isolation: isolate;
+}
+
+.date-picker-modal {
+  background-color: #1a1a1a;
+  border-radius: 16px 16px 0 0;
+  width: 100%;
+  max-width: 500px;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease-out;
+  overflow: hidden;
+}
+
+.date-picker-header {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px 8px;
+  border-bottom: 1px solid #333;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 8px;
+  margin: -8px;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+}
+
+.close-button:hover {
+  background-color: #333;
+}
+
+.date-picker-title {
+  flex: 1;
+  font-size: 24px;
+  font-weight: 700;
+  color: white;
+  text-align: center;
+  margin: 0;
+  padding-left: 16px; /* Компенсация кнопки закрытия */
+}
+
+.calendar-container {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  -webkit-overflow-scrolling: touch;
+  /* Кастомная прокрутка */
+  scrollbar-width: thin;
+  scrollbar-color: #0071c2 transparent;
+}
+
+.calendar-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.calendar-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.calendar-container::-webkit-scrollbar-thumb {
+  background-color: #0071c2;
+  border-radius: 3px;
+}
+
+.calendar-container::-webkit-scrollbar-thumb:hover {
+  background-color: #005fa3;
+}
+
+.month-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.month-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: white;
+  margin: 0 0 16px 0;
+  text-align: center;
+}
+
+.days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.day-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ccc;
+  text-transform: uppercase;
+}
+
+.day-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  background-color: transparent;
+  color: white;
+}
+
+.day-cell:hover:not(.past):not(.empty) {
+  background-color: #333;
+  transform: scale(1.05);
+}
+
+.day-cell.today {
+  color: #0071c2;
+  font-weight: 700;
+}
+
+.day-cell.today::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  border-radius: 6px;
+  border: 1px solid #0071c2;
+  background-color: rgba(0, 7, 18, 0.1);
+}
+
+.day-cell.past {
+  color: #555;
+  cursor: not-allowed;
+}
+
+.day-cell.past:hover {
+  background-color: transparent;
+  transform: none;
+}
+
+.day-cell.selected {
+  background-color: #0071c2;
+  color: white;
+  font-weight: 700;
+}
+
+.day-cell.range-end {
+  background-color: #0071c2;
+  color: white;
+  font-weight: 700;
+}
+
+.day-cell.empty {
+  cursor: default;
+}
+
+.selected-dates {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #333;
+  background-color: #1a1a1a;
+}
+
+.selected-date-field {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px;
+  background-color: #2a2a2a;
+  border-radius: 8px;
+  border: 1px solid #404040;
+  min-height: 48px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.selected-date-field:hover {
+  background-color: #333;
+  border-color: #0071c2;
+  transform: translateY(-1px);
+}
+
+.selected-date-field.filled {
+  border-color: #0071c2;
+}
+
+.selected-date-field.same-day {
+  background-color: #22384a;
+}
+
+.selected-date-field:active {
+  transform: translateY(0);
+}
+
+.selected-date-field.single-field {
+  margin: 0 auto;
+  max-width: 280px;
+}
+
+.selected-date-field .calendar-icon {
+  color: #ccc;
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+  opacity: 0.7;
+}
+
+.selected-date-field:hover .calendar-icon {
+  color: #999;
+}
+
+/* При выборе same-day затемняем иконку */
+.selected-date-field.same-day .calendar-icon {
+  color: #98c3e4;
+  opacity: 1;
+}
+
+.selected-date-field span {
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.done-button {
+  width: calc(100% - 40px);
+  margin: 16px 20px 20px;
+  padding: 16px;
+  background-color: #0071c2;
+  color: white;
+  border: none;
+  border-radius: 0;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.done-button:hover {
+  background-color: #005fa3;
+}
+
+.done-button:disabled {
+  background-color: #3a3a3a;
+  cursor: not-allowed;
+}
+
+.done-button:active {
+  background-color: #004d84;
+}
+
+/* Анимации */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* Для круглых календарей Booking.com стиль */
+.day-cell.selected::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  border-radius: 50%;
+  background-color: #0071c2;
+  z-index: -1;
+}
+
+.day-cell.selected {
+  background-color: transparent;
+  color: white;
+  font-weight: 700;
+}
+
+.day-cell.range-end::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 8px;
+  background-color: #0071c2;
+  z-index: -1;
+}
+
+/* Обновленный стиль для круглых выделений */
+.day-cell {
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+}
+
+.day-cell.selected {
+  background-color: #0071c2 !important;
+}
+
+.day-cell.range-end {
+  background-color: #0071c2 !important;
+}
+
+/* Когда оба дня одинаковые (round-trip same day) — второй клик делает оттенок темнее */
+.day-cell.selected.same-day,
+.day-cell.range-end.same-day {
+  background-color: #005fa3 !important;
+}
+
+.day-cell:hover:not(.past):not(.empty) {
+  border-radius: 50%;
+}
+
+.day-cell.today::before {
+  border-radius: 50%;
+}
+
+/* Индикатор промежуточных дней в диапазоне */
+.day-cell.in-range:not(.selected):not(.range-end) {
+  background-color: rgba(0, 113, 194, 0.2);
+  color: #0071c2;
+}
+
+.day-cell.in-range:not(.selected):not(.range-end)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 50%;
+  background-color: rgba(0, 113, 194, 0.2);
+  z-index: -1;
+}
+
+/* Мобильная адаптация */
+@media (max-width: 768px) {
+  .date-picker-modal {
+    height: 90vh;
+    max-width: 100%;
+    border-radius: 0;
+  }
+
+  .date-picker-header {
+    padding: 12px 16px 8px;
+  }
+
+  .date-picker-title {
+    font-size: 20px;
+  }
+
+  .calendar-container {
+    padding: 16px;
+    gap: 20px;
+  }
+
+  .month-title {
+    font-size: 18px;
+    margin-bottom: 12px;
+  }
+
+  .days-grid {
+    gap: 6px;
+  }
+
+  .day-cell {
+    height: 44px;
+    font-size: 15px;
+  }
+
+  .done-button {
+    margin: 12px 16px 16px;
+    padding: 14px;
+    font-size: 15px;
+  }
+
+  .selected-date-field {
+    padding: 10px 12px;
+    min-height: 44px;
+  }
+
+  .selected-date-field span {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 375px) {
+  .day-cell {
+    height: 40px;
+    font-size: 14px;
+  }
+
+  .days-grid {
+    gap: 4px;
+  }
+
+  .calendar-container {
+    gap: 16px;
+  }
+
+  .month-title {
+    font-size: 16px;
+  }
+}
+
+/* Убраны стили навигационных кнопок - теперь используется вертикальная прокрутка */

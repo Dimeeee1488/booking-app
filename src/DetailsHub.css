@@ -1,0 +1,17 @@
+.hub-page{background:#1a1a1a;color:white;min-height:100vh;padding-bottom:100px}
+.hub-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px}
+.hub-header h1{margin:0;font-size:18px;font-weight:600}
+.back-button{background:none;border:none;color:white;display:flex;align-items:center;cursor:pointer}
+/* stepper removed */
+.hub-list{padding:0 16px 120px;display:grid;gap:12px}
+.hub-card{display:flex;justify-content:space-between;align-items:center;background:#2a2a2a;border:1px solid #3a3a3a;border-radius:12px;padding:16px}
+/* Чтобы текст не толкал стрелку и не "уезжал" */
+.hub-card>div:first-child{flex:1;min-width:0}
+.hub-title{font-size:16px;font-weight:600}
+.hub-sub{color:#ccc;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hub-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hub-link{color:#ff7676;margin-top:6px}
+.hub-footer{position:fixed;left:0;right:0;bottom:0;background:#1a1a1a;border-top:1px solid #404040;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;justify-content:space-between}
+.price{font-size:18px;font-weight:700}
+.next-button{background:#0071c2;color:white;border:none;border-radius:8px;padding:14px 26px;font-weight:600}
+

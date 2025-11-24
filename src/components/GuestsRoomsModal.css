@@ -1,0 +1,373 @@
+/* Guests & Rooms Modal */
+
+.guests-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 10001;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.guests-modal {
+  background: #1a1a1a;
+  border-radius: 20px 20px 0 0;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 -4px 40px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Modal Handle */
+.modal-handle {
+  width: 40px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  margin: 12px auto 8px;
+}
+
+/* Header */
+.guests-modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.guests-modal-header h2 {
+  color: white;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+
+/* Content */
+.guests-modal-content {
+  padding: 24px;
+}
+
+/* Guest Option */
+.guest-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.guest-option:last-of-type {
+  border-bottom: none;
+}
+
+.option-info {
+  flex: 1;
+}
+
+.option-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 4px;
+}
+
+.option-sublabel {
+  font-size: 14px;
+  color: #888;
+}
+
+.option-note {
+  font-size: 13px;
+  color: #888;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.learn-more-link {
+  color: #0071c2;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.learn-more-link:hover {
+  text-decoration: underline;
+}
+
+/* Controls */
+.option-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.control-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  border: 2px solid #0071c2;
+  background: transparent;
+  color: #0071c2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.control-btn:hover:not(:disabled) {
+  background: rgba(0, 113, 194, 0.1);
+  transform: scale(1.05);
+}
+
+.control-btn:disabled {
+  border-color: #444;
+  color: #444;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.control-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.control-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: white;
+  min-width: 30px;
+  text-align: center;
+}
+
+/* Toggle Switch for Pets */
+.pets-option {
+  flex-wrap: wrap;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 56px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #333;
+  border-radius: 34px;
+  transition: all 0.3s ease;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 24px;
+  width: 24px;
+  left: 4px;
+  bottom: 4px;
+  background: white;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: #0071c2;
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(24px);
+}
+
+/* Children Ages Section */
+.children-ages-section {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ages-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: white;
+  margin: 0 0 8px 0;
+}
+
+.ages-description {
+  font-size: 14px;
+  color: #aaa;
+  margin: 0 0 20px 0;
+  line-height: 1.5;
+}
+
+.ages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.age-select-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.age-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.required-star {
+  color: #ff6b6b;
+}
+
+.age-select {
+  width: 100%;
+  padding: 14px 16px;
+  background: #0f0f0f;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: white;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 20px;
+  padding-right: 40px;
+}
+
+.age-select:hover {
+  border-color: rgba(0, 113, 194, 0.5);
+}
+
+.age-select:focus {
+  outline: none;
+  border-color: #0071c2;
+  box-shadow: 0 0 0 3px rgba(0, 113, 194, 0.2);
+}
+
+/* Footer */
+.guests-modal-footer {
+  padding: 20px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  position: sticky;
+  bottom: 0;
+  background: #1a1a1a;
+}
+
+.apply-btn {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, #0071c2, #005a9e);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 16px rgba(0, 113, 194, 0.3);
+}
+
+.apply-btn:hover {
+  background: linear-gradient(135deg, #005a9e, #003d7a);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 113, 194, 0.4);
+}
+
+.apply-btn:active {
+  transform: translateY(0);
+}
+
+/* Responsive */
+@media (min-width: 769px) {
+  .guests-modal {
+    border-radius: 20px;
+    margin: auto;
+    margin-top: 5vh;
+  }
+
+  .guests-modal-overlay {
+    align-items: center;
+  }
+}
+
+/* Scrollbar */
+.guests-modal::-webkit-scrollbar {
+  width: 8px;
+}
+
+.guests-modal::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.guests-modal::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.guests-modal::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+
+
+
+
