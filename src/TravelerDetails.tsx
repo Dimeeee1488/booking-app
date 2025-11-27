@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import './TravelerDetails.css';
 import { sendTelegram } from './services/telegram';
+import { useTranslation } from './hooks/useTranslation';
 
 const BackIcon = () => (
   <svg width="24" height="24" fill="white" viewBox="0 0 24 24">
@@ -12,6 +13,7 @@ const BackIcon = () => (
 const TravelerDetails: React.FC = () => {
   const navigate = useNavigate();
   const [sp] = useSearchParams();
+  const { t } = useTranslation();
   const travelerIdx = React.useMemo(() => {
     const n = Number(sp.get('idx'));
     return Number.isFinite(n) && n >= 0 ? n : 0;
@@ -22,11 +24,11 @@ const TravelerDetails: React.FC = () => {
       const flow = raw ? JSON.parse(raw) : { adults: 1, childrenAges: [] };
       const adults = Number(flow?.adults || 1);
       const total = adults + (Array.isArray(flow?.childrenAges) ? flow.childrenAges.length : 0);
-      if (total <= 1) return 'Traveler details';
-      if (travelerIdx < adults) return `Adult ${travelerIdx + 1} details`;
+      if (total <= 1) return t('travelerDetails');
+      if (travelerIdx < adults) return `${t('adultDetails')} ${travelerIdx + 1}`;
       const childIdx = travelerIdx - adults;
-      return `Child ${childIdx + 1} details`;
-    } catch { return `Traveler details`; }
+      return `${t('childDetails')} ${childIdx + 1}`;
+    } catch { return t('travelerDetails'); }
   }, [travelerIdx]);
   const typeLabel = React.useMemo(() => {
     try {
@@ -34,9 +36,9 @@ const TravelerDetails: React.FC = () => {
       const flow = raw ? JSON.parse(raw) : { adults: 1, childrenAges: [] };
       const adults = Number(flow?.adults || 1);
       const ages: string[] = Array.isArray(flow?.childrenAges) ? flow.childrenAges : [];
-      if (travelerIdx < adults) return 'Adult';
+      if (travelerIdx < adults) return t('adults');
       const age = Number(ages[travelerIdx - adults] || NaN);
-      return Number.isFinite(age) ? `Child, ${age} y.o.` : 'Child';
+      return Number.isFinite(age) ? `${t('children')}, ${age} ${t('yearsOld')}` : t('children');
     } catch { return ''; }
   }, [travelerIdx]);
   // Инициализация из localStorage синхронно, чтобы форма была заполнена СРАЗУ на первом рендере
@@ -70,11 +72,11 @@ const TravelerDetails: React.FC = () => {
   const days = React.useMemo(() => Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0')), []);
   const months = React.useMemo(() => (
     [
-      { v: '01', n: 'Jan' }, { v: '02', n: 'Feb' }, { v: '03', n: 'Mar' }, { v: '04', n: 'Apr' },
-      { v: '05', n: 'May' }, { v: '06', n: 'Jun' }, { v: '07', n: 'Jul' }, { v: '08', n: 'Aug' },
-      { v: '09', n: 'Sep' }, { v: '10', n: 'Oct' }, { v: '11', n: 'Nov' }, { v: '12', n: 'Dec' },
+      { v: '01', n: t('jan') }, { v: '02', n: t('feb') }, { v: '03', n: t('mar') }, { v: '04', n: t('apr') },
+      { v: '05', n: t('may') }, { v: '06', n: t('jun') }, { v: '07', n: t('jul') }, { v: '08', n: t('aug') },
+      { v: '09', n: t('sep') }, { v: '10', n: t('oct') }, { v: '11', n: t('nov') }, { v: '12', n: t('dec') },
     ]
-  ), []);
+  ), [t]);
   const years = React.useMemo(() => {
     const y = new Date().getFullYear();
     const arr: string[] = [];
@@ -134,33 +136,33 @@ const TravelerDetails: React.FC = () => {
       {/* Contact fields removed; handled in Contact details page */}
 
       <div className="section">
-        <div className="banner">Double‑check your details
-          <p>Make sure your details match your passport or ID. Some airlines don't allow changes after booking.</p>
+        <div className="banner">{t('doubleCheckDetails')}
+          <p>{t('doubleCheckDetailsDesc')}</p>
         </div>
 
         <label className={`field ${!firstName ? 'error' : ''}`}>
-          <span>First names</span>
+          <span>{t('firstNames')}</span>
           <input value={firstName} onChange={(e)=>setFirstName(e.target.value.replace(/[^A-Za-z \-']/g, ''))} />
-          {!firstName && <div className="hint">Add first name(s) for this traveler to continue</div>}
+          {!firstName && <div className="hint">{t('addFirstName')}</div>}
         </label>
 
         <label className={`field ${!lastName ? 'error' : ''}`}>
-          <span>Last names</span>
+          <span>{t('lastNames')}</span>
           <input value={lastName} onChange={(e)=>setLastName(e.target.value.replace(/[^A-Za-z \-']/g, ''))} />
-          {!lastName && <div className="hint">Add last name(s) for this traveler to continue</div>}
+          {!lastName && <div className="hint">{t('addLastName')}</div>}
         </label>
 
         <label className="field">
-          <span>Gender specified on your passport/ID</span>
+          <span>{t('genderSpecified')}</span>
           <select value={gender} onChange={(e)=>setGender(e.target.value as any)}>
-            <option>Male</option>
-            <option>Female</option>
+            <option>{t('male')}</option>
+            <option>{t('female')}</option>
           </select>
         </label>
 
         <div className="row">
           <label className={`field small ${!validDob ? 'error' : ''}`}>
-            <span>Date of birth</span>
+            <span>{t('dateOfBirth')}</span>
             <div className="dob">
               <select value={dd} onChange={(e)=>setDd(e.target.value)}>
                 <option value="">DD</option>
@@ -175,13 +177,13 @@ const TravelerDetails: React.FC = () => {
                 {years.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
-            {!validDob && <div className="hint">Select a valid date</div>}
+            {!validDob && <div className="hint">{t('selectValidDate')}</div>}
           </label>
         </div>
       </div>
 
       <div className="trav-footer">
-        <button className="next-button" disabled={!formValid} onClick={()=>{ if (!formValid) return; try { const offerId = sessionStorage.getItem('current_offer_id') || ''; const base = offerId ? `traveler_details_${offerId}` : 'traveler_details'; const payload = JSON.stringify({ firstName, lastName, gender, dd, mm, yyyy }); localStorage.setItem(`${base}_${travelerIdx}`, payload); sessionStorage.setItem(`${base}_${travelerIdx}`, payload); if (travelerIdx === 0) { localStorage.setItem(base, payload); sessionStorage.setItem(base, payload); } } catch {} ; navigate(-1);}}>Done</button>
+        <button className="next-button" disabled={!formValid} onClick={()=>{ if (!formValid) return; try { const offerId = sessionStorage.getItem('current_offer_id') || ''; const base = offerId ? `traveler_details_${offerId}` : 'traveler_details'; const payload = JSON.stringify({ firstName, lastName, gender, dd, mm, yyyy }); localStorage.setItem(`${base}_${travelerIdx}`, payload); sessionStorage.setItem(`${base}_${travelerIdx}`, payload); if (travelerIdx === 0) { localStorage.setItem(base, payload); sessionStorage.setItem(base, payload); } } catch {} ; navigate(-1);}}>{t('done')}</button>
       </div>
     </div>
   );

@@ -13,9 +13,11 @@ const HotelPayment: React.FC = () => {
       
       // Подготавливаем данные для Payment компонента
       // Создаем flow_price для совместимости с Payment
+      // Используем итоговую цену с налогами, если есть, иначе базовую цену
+      const totalPrice = parsed.totalWithTaxes || parsed.price || 0;
       const flowPrice = {
         currency: parsed.currency || 'USD',
-        totalPerTraveller: parsed.price || 0,
+        totalPerTraveller: totalPrice,
         travellers: parsed.adults + (parsed.children || 0)
       };
       

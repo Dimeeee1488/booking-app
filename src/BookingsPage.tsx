@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import './BookingsPage.css';
+import { useTranslation } from './hooks/useTranslation';
 
 // Icons
 const SearchNavIcon = () => (
@@ -29,13 +30,14 @@ const SignInNavIcon = () => (
 
 const BookingsPage = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = React.useState<'active' | 'past' | 'canceled'>('active');
 
   return (
     <div className="bookings-page">
       {/* Header */}
       <header className="bookings-header">
-        <h1 className="bookings-title">Trips</h1>
+        <h1 className="bookings-title">{t('trips')}</h1>
         <div className="header-icons">
           <button className="icon-button">
             <svg width="24" height="24" fill="white" viewBox="0 0 24 24">
@@ -122,29 +124,29 @@ const BookingsPage = () => {
 
         {/* Text Content */}
         <h2 className="bookings-empty-title">
-          {activeTab === 'active' && 'No bookings yet'}
-          {activeTab === 'past' && 'No past bookings'}
-          {activeTab === 'canceled' && 'No canceled bookings'}
+          {activeTab === 'active' && t('noBookingsYet')}
+          {activeTab === 'past' && t('noPastBookings')}
+          {activeTab === 'canceled' && t('noCanceledBookings')}
         </h2>
-        <p className="bookings-empty-subtitle">Sign in or create an account to get started.</p>
+        <p className="bookings-empty-subtitle">{t('signInOrCreateAccount')}</p>
         
         {/* Sign In Button */}
-        <button className="bookings-signin-button">Sign in</button>
+        <button className="bookings-signin-button">{t('signIn')}</button>
       </div>
 
       {/* Bottom Navigation */}
       <nav className="bottom-nav">
         <div className="bottom-nav-item" onClick={() => navigate('/')}>
           <SearchNavIcon />
-          <span className="bottom-nav-label">Search</span>
+          <span className="bottom-nav-label">{t('searchLabel')}</span>
         </div>
         <div className="bottom-nav-item active">
           <BookingsNavIcon />
-          <span className="bottom-nav-label">Bookings</span>
+          <span className="bottom-nav-label">{t('bookings')}</span>
         </div>
         <div className="bottom-nav-item" onClick={() => navigate('/favorites')}>
           <FavoritesNavIcon />
-          <span className="bottom-nav-label">Favorites</span>
+          <span className="bottom-nav-label">{t('favorites')}</span>
         </div>
         {(() => {
           try {
@@ -153,19 +155,19 @@ const BookingsPage = () => {
                 <svg className="bottom-nav-icon" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z"/>
                 </svg>
-                <span className="bottom-nav-label">Profile</span>
+                <span className="bottom-nav-label">{t('profileLabel')}</span>
               </div>
             ) : (
               <div className="bottom-nav-item" onClick={() => navigate('/auth?mode=signin')}>
                 <SignInNavIcon />
-                <span className="bottom-nav-label">Sign in</span>
+                <span className="bottom-nav-label">{t('signIn')}</span>
               </div>
             );
           } catch {
             return (
               <div className="bottom-nav-item" onClick={() => navigate('/auth?mode=signin')}>
                 <SignInNavIcon />
-                <span className="bottom-nav-label">Sign in</span>
+                <span className="bottom-nav-label">{t('signIn')}</span>
               </div>
             );
           }

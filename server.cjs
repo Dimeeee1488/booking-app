@@ -145,9 +145,20 @@ app.get('/api/attractions/getAttractionDetails', async (req, res) => {
 
     let targetUrl;
     if (slug) {
-      targetUrl = `https://${RAPIDAPI_HOST}/api/v1/attraction/getAttractionDetails?slug=${slug}&currency_code=${currency_code}&languagecode=${languagecode}`;
+      // Ensure parameters are properly encoded using URLSearchParams
+      const params = new URLSearchParams({
+        slug,
+        currency_code,
+        languagecode
+      });
+      targetUrl = `https://${RAPIDAPI_HOST}/api/v1/attraction/getAttractionDetails?${params.toString()}`;
     } else {
-      targetUrl = `https://${RAPIDAPI_HOST}/api/v1/attraction/getAttractionDetails?id=${id}&currency_code=${currency_code}&languagecode=${languagecode}`;
+      const params = new URLSearchParams({
+        id,
+        currency_code,
+        languagecode
+      });
+      targetUrl = `https://${RAPIDAPI_HOST}/api/v1/attraction/getAttractionDetails?${params.toString()}`;
     }
     
     console.log(`Proxying attraction details to: ${targetUrl}`);
@@ -161,11 +172,20 @@ app.get('/api/attractions/getAttractionDetails', async (req, res) => {
       },
     });
 
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Upstream API error (${response.status}):`, errorText);
+      throw new Error(`Upstream API returned status ${response.status}: ${errorText}`);
+    }
+
     const data = await response.json();
     res.status(response.status).json(data);
   } catch (error) {
     console.error('Attraction details error:', error);
-    res.status(500).json({ error: 'Failed to get attraction details' });
+    res.status(500).json({ 
+      error: 'Failed to get attraction details',
+      message: error.message
+    });
   }
 });
 
@@ -444,6 +464,42 @@ app.get('/api/flights/searchFlightsMultiStops', async (req, res) => {
   } catch (error) {
     console.error('Multi-stop flight search error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Получение детальной информации по конкретному авиабилету по токену
+app.get('/api/flights/getFlightDetails', async (req, res) => {
+  try {
+    const { token, currency_code } = req.query;
+
+    if (!token) {
+      return res.status(400).json({ error: 'token parameter is required' });
+    }
+
+    // Убеждаемся, что токен - это строка
+    const tokenStr = String(token);
+    
+    const params = new URLSearchParams();
+    params.append('token', tokenStr);
+
+    if (currency_code) {
+      params.append('currency_code', String(currency_code));
+    }
+
+    const apiUrl = `https://${RAPIDAPI_HOST}/api/v1/flights/getFlightDetails?${params.toString()}`;
+    console.log('Server: Fetching flight details, token length:', tokenStr.length);
+
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'x-rapidapi-host': RAPIDAPI_HOST,
+        'x-rapidapi-key': RAPIDAPI_KEY,
+      },
+    });
+
+    return relayUpstreamResponse(response, res);
+  } catch (error) {
+    return handleProxyFailure(res, 'Flight details', error);
   }
 });
 

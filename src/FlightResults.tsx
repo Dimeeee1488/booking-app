@@ -4,6 +4,8 @@ import { searchFlights, searchAirports } from './services/flightApi';
 import { setCache, getCache } from './services/cache';
 import './FlightResults.css';
 import { formatAircraftType } from './utils/aircraft';
+import { useTranslation } from './hooks/useTranslation';
+import { calculateFlightPromoDiscount } from './utils/flightPromoUtils';
 
 // Локальные типы данных (без импорта из API)
 interface Airport {
@@ -60,7 +62,7 @@ interface FlightOffer {
 // Локальные функции форматирования
 const formatPrice = (units: number, nanos: number, currency: string = 'AED'): string => {
   const total = units + (nanos / 1000000000);
-  return `${currency} ${Math.round(total).toLocaleString()}`;
+  return `${currency} ${Number(total.toFixed(2))}`;
 };
 
 const formatDuration = (minutes: number): string => {
@@ -83,7 +85,38 @@ const formatDateTime = (isoString: string): { time: string; date: string } => {
   return { time, date: dateStr };
 };
 
-// removed unused getStopsText
+// Подсчёт пересадок:
+// 1) Если API вернуло числовое поле `stops` на сегменте — доверяем ему.
+// 2) Иначе считаем по ногам: каждая стыковка между legs = 1 пересадка + flightStops.
+const countStopsForLegs = (legs: any[] = []) => {
+  return legs.reduce((total, leg, idx) => {
+    const structural = idx < legs.length - 1 ? 1 : 0;
+    const extra = Array.isArray(leg?.flightStops) ? leg.flightStops.length : 0;
+    return total + structural + extra;
+  }, 0);
+};
+
+const getStopsForSegment = (seg: any): number => {
+  // 1) Явное поле от API
+  if (typeof seg?.stops === 'number' && seg.stops >= 0) {
+    return seg.stops;
+  }
+  // 2) По ногам + flightStops
+  const legs = Array.isArray(seg?.legs) ? seg.legs : [];
+  const legStops = countStopsForLegs(legs);
+  const fallback = Array.isArray((seg as any)?.flightStops) ? (seg as any).flightStops.length : 0;
+  if (legStops > 0) return legStops;
+  if (fallback > 0) return fallback;
+  return Math.max(0, legs.length - 1);
+};
+
+const computeTotalStops = (flight: FlightOffer): number => {
+  try {
+    return (flight.segments || []).reduce((total, seg: any) => total + getStopsForSegment(seg), 0);
+  } catch {
+    return 0;
+  }
+};
 
 // Deduplicate flights by token to prevent React key collisions (hoisted)
 function dedupeByToken(list: any[]): any[] {
@@ -129,7 +162,8 @@ const safeSessionSet = (key: string, value: string) => {
   }
 };
 
-// Триммер данных рейсов для снапшота (убираем тяжелые поля)
+// Триммер данных рейсов для снапшота (убираем тяжелые поля, НО сохраняем всю структуру legs/stops),
+// чтобы расчёт пересадок и длительности после восстановления работал так же, как и сразу после API.
 const buildLiteFlights = (flights: any[]) => {
   try {
     return (flights || []).map((f: any) => ({
@@ -141,12 +175,24 @@ const buildLiteFlights = (flights: any[]) => {
         departureTime: s?.departureTime,
         arrivalTime: s?.arrivalTime,
         totalTime: s?.totalTime,
-        // Берем только первый leg и только нужные поля
-        legs: Array.isArray(s?.legs) && s.legs.length ? [{
-          flightInfo: s.legs[0]?.flightInfo,
-          carriersData: s.legs[0]?.carriersData ? [s.legs[0]?.carriersData?.[0]] : [],
-          totalTime: s.legs[0]?.totalTime
-        }] : []
+        stops: (s as any)?.stops,
+        flightStops: Array.isArray((s as any)?.flightStops) ? (s as any).flightStops : [],
+        // Сохраняем ВСЕ legs, но только нужные для UI/подсчётов поля
+        legs: Array.isArray(s?.legs)
+          ? s.legs.map((leg: any) => ({
+              departureTime: leg?.departureTime,
+              arrivalTime: leg?.arrivalTime,
+              departureAirport: leg?.departureAirport,
+              arrivalAirport: leg?.arrivalAirport,
+              cabinClass: leg?.cabinClass,
+              flightInfo: leg?.flightInfo,
+              carriersData: Array.isArray(leg?.carriersData) && leg.carriersData.length
+                ? [leg.carriersData[0]]
+                : [],
+              totalTime: leg?.totalTime,
+              flightStops: Array.isArray(leg?.flightStops) ? leg.flightStops : []
+            }))
+          : []
       }))
     }));
   } catch {
@@ -211,10 +257,24 @@ const ToggleSwitch = ({ checked, onChange }: { checked: boolean; onChange: (chec
 
 
 
+// Иконки багажа из FlightDetail
+const BackpackIcon = () => (
+  <svg width="20" height="20" fill="currentColor" viewBox="0 -960 960 960">
+    <path d="M240-80q-33 0-56.5-23.5T160-160v-480q0-56 34-98t86-56v-86h120v80h160v-80h120v86q52 14 86 56t34 98v480q0 33-23.5 56.5T720-80H240Zm0-80h480v-480q0-33-23.5-56.5T640-720H320q-33 0-56.5 23.5T240-640v480Zm340-160h80v-160H300v80h280v80ZM480-440Z"/>
+  </svg>
+);
+
+const CarryOnSuitcaseIcon = () => (
+  <svg width="20" height="20" fill="currentColor" viewBox="0 -960 960 960">
+    <path d="M640-280q50 0 85 35t35 85q0 50-35 85t-85 35q-38 0-68.5-22T527-120H320q-33 0-56.5-23.5T240-200v-400q0-33 23.5-56.5T320-680h240v-120q-33 0-56.5-23.5T480-880h160v600Zm-280 80v-400h-40v400h40Zm80-400v400h87q4-15 13-27.5t20-22.5v-350H440Zm200 500q25 0 42.5-17.5T700-160q0-25-17.5-42.5T640-220q-25 0-42.5 17.5T580-160q0 25 17.5 42.5T640-100Zm0-60ZM440-400Zm-80 200v-400 400Zm80-400v400-400Z"/>
+  </svg>
+);
+
 // Новый компонент для реальных данных API
 const RealFlightCard = ({ flight }: { flight: FlightOffer }) => {
   const navigate = useNavigate();
   const [sp] = useSearchParams();
+  const { t } = useTranslation();
   // removed unused logo error state
   const [showPriceInfo, setShowPriceInfo] = React.useState(false);
   
@@ -263,14 +323,86 @@ const RealFlightCard = ({ flight }: { flight: FlightOffer }) => {
     return total + (stopsByLeg > 0 ? stopsByLeg : structuralStops);
   }, 0); */
   
-  // Цена за одного (как приходит из API)
-  const unitCurrency = flight.priceBreakdown.total.currencyCode;
+  // Цена за одного: всегда отображаем в валюте запроса, если она есть в URL.
+  // Если API по какой-то причине вернул другую валюту, берём код из search params,
+  // чтобы заголовок и карточка были согласованы.
+  const searchCurrency = (sp.get('currency') || '').toUpperCase();
+  const unitCurrency = searchCurrency || flight.priceBreakdown.total.currencyCode;
   const unitAmount = (flight.priceBreakdown.total.units || 0) + (flight.priceBreakdown.total.nanos || 0) / 1_000_000_000;
   const price = formatPrice(
     flight.priceBreakdown.total.units,
     flight.priceBreakdown.total.nanos,
     unitCurrency
   );
+  // Вычисляем реальное время полёта:
+  // 1) В первую очередь доверяем полю totalTime от API (в секундах) по каждому сегменту.
+  // 2) Если по какой‑то причине totalTime отсутствует, пересчитываем как в FlightDetail.
+  const totalDurationHours = React.useMemo(() => {
+    // Путь 1: totalTime из API
+    let totalSeconds = 0;
+    for (const seg of flight.segments) {
+      const segTotal = (seg as any)?.totalTime || 0;
+      totalSeconds += segTotal;
+    }
+
+    if (totalSeconds > 0) {
+      return totalSeconds / 3600;
+    }
+
+    // Путь 2 (fallback): как в FlightDetail — по времени вылета/прилёта минус пересадки внутри сегментов
+    let totalMinutes = 0;
+    for (const seg of flight.segments) {
+      const depTime = new Date(seg.departureTime).getTime();
+      const arrTime = new Date(seg.arrivalTime).getTime();
+      const segmentMinutes = Math.max(0, Math.round((arrTime - depTime) / 60000));
+      const legs = seg.legs || [];
+      let layoverMinutes = 0;
+      for (let i = 0; i < legs.length - 1; i++) {
+        const prevArr = new Date(legs[i].arrivalTime).getTime();
+        const nextDep = new Date(legs[i + 1].departureTime).getTime();
+        layoverMinutes += Math.max(0, Math.round((nextDep - prevArr) / 60000));
+      }
+      totalMinutes += Math.max(0, segmentMinutes - layoverMinutes);
+    }
+    return totalMinutes / 60;
+  }, [flight.segments]);
+  const flightPromo = React.useMemo(
+    () =>
+      calculateFlightPromoDiscount({
+        basePrice: unitAmount,
+        currency: unitCurrency,
+        durationHours: totalDurationHours,
+      }),
+    [unitAmount, unitCurrency, totalDurationHours]
+  );
+  const discountedUnitAmount = flightPromo.discountedPrice;
+  const discountedPriceLabel = `${unitCurrency} ${discountedUnitAmount.toFixed(2)}`;
+  const totalStops = React.useMemo(() => computeTotalStops(flight), [flight]);
+  const stopsLabel = totalStops === 0 ? t('directLabel') : totalStops === 1 ? t('oneStop') : `${totalStops} ${t('stopsLabel')}`;
+  const badgeMessageMap = React.useMemo(
+    () => ({
+      longHaul65: `${flightPromo.displayPercent}% OFF${totalDurationHours >= 4 ? ' 4h+' : ''}`,
+      shortHaul45: `${flightPromo.displayPercent}% OFF`,
+      budget30: `${flightPromo.displayPercent}% OFF Budget`,
+    }),
+    [t, flightPromo.displayPercent, totalDurationHours]
+  );
+  const promoDescriptionMap = React.useMemo(
+    () => ({
+      longHaul65: `${flightPromo.displayPercent}% off on flights over 4 hours.`,
+      shortHaul45: `${flightPromo.displayPercent}% off on flights under 4 hours.`,
+      budget30: `${flightPromo.displayPercent}% off on budget fares under $35.`,
+    }),
+    [flightPromo.displayPercent]
+  );
+  const bonusMessageMap = React.useMemo(
+    () => ({
+      freeCheckedBag: t('freeBaggageIncluded') || 'Free checked baggage included',
+      freeCarryOn: t('carryOnAlwaysFree') || 'Carry-on is always free with this fare',
+    }),
+    [t]
+  );
+  const promoBadge = badgeMessageMap[flightPromo.promoCode];
 
   // Оценка общей стоимости для всех пассажиров с правилами для младенцев
   const adultsCount = Math.max(1, parseInt(sp.get('adults') || '1'));
@@ -284,8 +416,8 @@ const RealFlightCard = ({ flight }: { flight: FlightOffer }) => {
   const travellersCount = adultsCount + paidChildrenCount + infantCount;
 
   // Фиксированная надбавка за младенца в THB, иначе 10% от цены
-  const infantFeePerInfant = unitCurrency === 'THB' ? 3500 : unitAmount * 0.1;
-  const estimatedTotalAmount = unitAmount * (adultsCount + paidChildrenCount) + infantFeePerInfant * infantCount;
+  const infantFeePerInfant = unitCurrency === 'THB' ? 3500 : discountedUnitAmount * 0.1;
+  const estimatedTotalAmount = discountedUnitAmount * (adultsCount + paidChildrenCount) + infantFeePerInfant * infantCount;
   const estimatedLabel = `${travellersCount} traveller${travellersCount > 1 ? 's' : ''}`;
   const estimatedTotal = formatPrice(Math.floor(estimatedTotalAmount), Math.round((estimatedTotalAmount % 1) * 1_000_000_000), unitCurrency);
 
@@ -356,13 +488,15 @@ const RealFlightCard = ({ flight }: { flight: FlightOffer }) => {
 
   return (
     <div className="flight-card flight-card-appear" onClick={handleCardClick}>
-      <div className="flight-header">
-        <div style={{ display:'grid', gap: 12, flex: 1 }}>
-          {flight.segments.map((seg, idx) => {
+      <div className="flight-card-content">
+        {/* Левая колонка - детали рейса */}
+        <div className="flight-details-section">
+          <div className="flight-segments-list">
+            {flight.segments.map((seg, idx) => {
             const dep = formatDateTime(seg.departureTime);
             const arr = formatDateTime(seg.arrivalTime);
             const legs = seg.legs || [];
-            const segStops = Math.max(0, legs.length - 1);
+            const segStops = getStopsForSegment(seg);
             let layMinutes = 0; const layAirports: string[] = [];
             for (let i=0;i<legs.length-1;i++){
               const prevArr = new Date(legs[i].arrivalTime).getTime();
@@ -397,11 +531,26 @@ const RealFlightCard = ({ flight }: { flight: FlightOffer }) => {
                       <div className="dot start"></div>
                       <div className="duration-info">
                         {segStops === 0 ? (
-                          <span className="direct">Direct</span>
+                          <span className="direct">{t('directLabel')}</span>
                         ) : (
-                          <span className="stops">{segStops === 1 ? '1 stop' : `${segStops} stops`}</span>
+                          <span className="stops">
+                            {segStops === 1 ? t('oneStop') : `${segStops} ${t('stopsLabel')}`}
+                          </span>
                         )}
-                        <span className="duration">{formatDuration(Math.round((seg.totalTime||0)/60))}</span>
+                        <span className="duration">{(() => {
+                          // Для сегмента в первую очередь используем seg.totalTime (секунды) из API —
+                          // это общее время "от вылета до прилёта" с учётом часовых поясов.
+                          const apiSeconds = (seg as any)?.totalTime || 0;
+                          if (apiSeconds > 0) {
+                            const mins = Math.max(0, Math.round(apiSeconds / 60));
+                            return formatDuration(mins);
+                          }
+                          // Fallback: считаем по времени вылета/прилёта
+                          const depTime = new Date(seg.departureTime).getTime();
+                          const arrTime = new Date(seg.arrivalTime).getTime();
+                          const segmentMinutes = Math.max(0, Math.round((arrTime - depTime) / 60000));
+                          return formatDuration(segmentMinutes);
+                        })()}</span>
                         {layMinutes>0 && (
                           <span className="layover" style={{ marginLeft: 8, color: '#bbb', fontSize: 12 }}>
                             Layover {layText}{layAirports.length?` · ${layAirports.slice(0,3).join(', ')}${layAirports.length>3?'…':''}`:''}
@@ -421,71 +570,157 @@ const RealFlightCard = ({ flight }: { flight: FlightOffer }) => {
               </div>
             );
           })}
+          </div>
         </div>
-      </div>
-      <div className="footer-row">
-        <div className="airline-name">{airline?.name || 'Unknown Airline'}</div>
-        <div className="price-bar">
-          <div className="price-row" style={{ position: 'relative' }}>
-            <button className="info-button" onClick={(e) => { e.stopPropagation(); setShowPriceInfo(v => !v); }}>
-              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
-              </svg>
-            </button>
-            <span className="price">{price}</span>
-            {showPriceInfo && (
-              <div style={{ position: 'absolute', right: 0, top: 28, background: '#2a2a2a', border: '1px solid #404040', borderRadius: 10, padding: '12px 14px', width: 260, zIndex: 3 }} onClick={(e)=>e.stopPropagation()}>
-                <div style={{ color: 'white', fontWeight: 600, marginBottom: 8 }}>Price breakdown</div>
-                <div style={{ display: 'grid', gap: 6, color: '#ddd', fontSize: 13 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Base (per traveller)</span>
-                    <span>{price}</span>
-                  </div>
-                  {infantCount > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Infant fee × {infantCount}</span>
-                      <span>{formatPrice(Math.floor(infantFeePerInfant), Math.round((infantFeePerInfant % 1) * 1_000_000_000), unitCurrency)}</span>
-                    </div>
-                  )}
-                  <div style={{ height: 1, background: '#404040', margin: '4px 0' }} />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'white', fontWeight: 600 }}>
-                    <span>Estimated total</span>
-                    <span>{estimatedTotal}</span>
-                  </div>
-                  <div style={{ color: '#999', fontSize: 12 }}>{estimatedLabel}</div>
-                </div>
+        
+        {/* Блок с чипсами и ценой под всеми направлениями */}
+        <div className="flight-price-bottom">
+          {/* Чипсы слева */}
+          <div className="flight-info-chips-left">
+            {aircraft && (
+              <div className="info-chip">
+                <svg className="chip-icon" width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+                </svg>
+                <span className="chip-text">{aircraft}</span>
               </div>
             )}
+            {flightNumber && (
+              <div className="info-chip">
+                <svg className="chip-icon" width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h8c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-4 18c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm3.25-4H6.75V4h6.5v12z"/>
+                </svg>
+                <span className="chip-text">{airline?.code} {flightNumber}</span>
+              </div>
+            )}
+            <div className="info-chip">
+              <svg className="chip-icon" width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+              </svg>
+              <span className="chip-text">{stopsLabel}</span>
+            </div>
           </div>
-          <div style={{ color: '#bbb', fontSize: 12, marginTop: 4 }}>
-            {estimatedTotal} · {estimatedLabel}
+          
+          {/* Иконки багажа и цена справа */}
+          <div className="flight-price-inline">
+            {/* Иконки багажа - рюкзак + чемодан с зелёной галочкой */}
+            <div
+              className="baggage-icons-group"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="baggage-icon-small">
+                <BackpackIcon />
+              </div>
+              <div className="baggage-icon-small">
+                <CarryOnSuitcaseIcon />
+              </div>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                className="baggage-check"
+              >
+                <circle cx="12" cy="12" r="10" fill="#00a884" />
+                <path
+                  d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"
+                  fill="white"
+                />
+              </svg>
+              <div className="baggage-tooltip">
+                {(t as any)('includedBaggage') ||
+                  'Included baggage: cabin bag & personal item'}
+              </div>
+            </div>
+            
+            {/* Цена под иконками багажа */}
+            <div className="price-inline-block" style={{ position: 'relative' }}>
+              <div className="price-main-display">
+                <span className="price-discounted-large">{discountedPriceLabel}</span>
+                <button className="info-button" onClick={(e) => { e.stopPropagation(); setShowPriceInfo(v => !v); }}>
+                  <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                  </svg>
+                </button>
+              </div>
+              {showPriceInfo && (
+                <div className="price-info-modal" onClick={(e)=>e.stopPropagation()}>
+                  <div className="price-info-header">{t('priceBreakdown') || 'Price breakdown'}</div>
+                  <div className="price-info-content">
+                    <div className="price-info-row">
+                      <span className="price-info-label">{t('originalPrice') || 'Original price'}</span>
+                      <span className="price-info-value price-info-original">{price}</span>
+                    </div>
+                    <div className="price-info-row">
+                      <span className="price-info-label">{t('promoPriceLabel') || 'Promo price'}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                        <span className="price-info-value price-info-discounted">{discountedPriceLabel}</span>
+                        {promoBadge && (
+                          <span style={{ 
+                            fontSize: '11px', 
+                            color: '#00a884', 
+                            fontWeight: 600,
+                            background: 'rgba(0, 168, 132, 0.1)',
+                            padding: '2px 6px',
+                            borderRadius: '4px'
+                          }}>
+                            {promoBadge}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="price-info-row price-info-savings">
+                      <span className="price-info-label">{t('youSave') || 'You save'}</span>
+                      <span className="price-info-value">
+                        {unitCurrency} {flightPromo.discountAmount.toFixed(2)}
+                        <span style={{ marginLeft: '6px', fontSize: '13px', opacity: 0.9 }}>
+                          ({flightPromo.displayPercent}%)
+                        </span>
+                      </span>
+                    </div>
+                    {flightPromo.bonuses.length > 0 && (
+                      <div className="price-info-included">
+                        <div className="price-info-included-title">{t('included') || 'Included'}</div>
+                        <div className="price-info-included-list">
+                          {flightPromo.bonuses.map((bonus) => (
+                            <div key={bonus} className="price-info-included-item">
+                              <span className="price-info-check">✓</span>
+                              <span>{bonusMessageMap[bonus] || bonus}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {infantCount > 0 && (
+                      <div className="price-info-row">
+                        <span className="price-info-label">{t('infantFeeLabel') || 'Infant fee'} × {infantCount}</span>
+                        <span className="price-info-value">{formatPrice(Math.floor(infantFeePerInfant), Math.round((infantFeePerInfant % 1) * 1_000_000_000), unitCurrency)}</span>
+                      </div>
+                    )}
+                    <div className="price-info-total">
+                      <div className="price-info-row price-info-total-row">
+                        <span className="price-info-label">{t('estimatedTotalLabel') || 'Estimated total'}</span>
+                        <span className="price-info-value price-info-total-value">{estimatedTotal}</span>
+                      </div>
+                      <div className="price-info-travelers">{estimatedLabel}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          <span className="total">Total</span>
         </div>
       </div>
 
-      <div className="flight-bottom">
-      <div className="flight-details">
-        <div className="flight-info-chips">
-          {aircraft && (
-            <div className="info-chip">
-              <svg className="chip-icon" width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
-              </svg>
-              <span className="chip-text">{aircraft}</span>
-            </div>
-          )}
-          {flightNumber && (
-            <div className="info-chip">
-              <svg className="chip-icon" width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h8c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-4 18c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm3.25-4H6.75V4h6.5v12z"/>
-              </svg>
-              <span className="chip-text">{airline?.code} {flightNumber}</span>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+      {/* Кнопка View details - в самом низу */}
+      <button
+        className="view-details-button"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleCardClick();
+        }}
+      >
+        {t('viewDetails') === 'viewDetails' ? 'View details' : t('viewDetails')}
+      </button>
     </div>
   );
 };
@@ -500,21 +735,22 @@ const SortModal = ({ isOpen, onClose, sortBy, setSortBy }: {
   sortBy: string;
   setSortBy: (value: string) => void;
 }) => {
+  const { t } = useTranslation();
   if (!isOpen) return null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="sort-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Sort by</h3>
+          <h3>{t('sortBy')}</h3>
         </div>
         
         <div className="sort-options">
           <div className="sort-option" onClick={() => setSortBy('best')}>
             <div className="sort-option-content">
-              <div className="sort-option-title">Best</div>
+              <div className="sort-option-title">{t('sortByBest').replace('Sort by: ', '').trim()}</div>
               <div className="sort-option-description">
-                We look at the price, travel time, number of stops, and baggage allowance to determine which options you might like best.
+                {t('sortByBestDescription')}
               </div>
             </div>
             <div className={`radio-button ${sortBy === 'best' ? 'active' : ''}`}>
@@ -524,7 +760,7 @@ const SortModal = ({ isOpen, onClose, sortBy, setSortBy }: {
           
           <div className="sort-option" onClick={() => setSortBy('cheapest')}>
             <div className="sort-option-content">
-              <div className="sort-option-title">Cheapest</div>
+              <div className="sort-option-title">{t('sortByCheapest')}</div>
             </div>
             <div className={`radio-button ${sortBy === 'cheapest' ? 'active' : ''}`}>
               {sortBy === 'cheapest' && <div className="radio-dot"></div>}
@@ -533,7 +769,7 @@ const SortModal = ({ isOpen, onClose, sortBy, setSortBy }: {
           
           <div className="sort-option" onClick={() => setSortBy('fastest')}>
             <div className="sort-option-content">
-              <div className="sort-option-title">Fastest</div>
+              <div className="sort-option-title">{t('sortByFastest')}</div>
             </div>
             <div className={`radio-button ${sortBy === 'fastest' ? 'active' : ''}`}>
               {sortBy === 'fastest' && <div className="radio-dot"></div>}
@@ -542,7 +778,7 @@ const SortModal = ({ isOpen, onClose, sortBy, setSortBy }: {
         </div>
         
         <button className="done-button" onClick={onClose}>
-          Done
+          {t('doneButton')}
         </button>
       </div>
     </div>
@@ -551,8 +787,9 @@ const SortModal = ({ isOpen, onClose, sortBy, setSortBy }: {
 
 // Beautiful Loading Animation Component
 const FlightLoadingAnimation: React.FC = () => {
+  const { t } = useTranslation();
   const [progress, setProgress] = React.useState(0);
-  const [loadingText, setLoadingText] = React.useState('Searching for flights...');
+  const [loadingText, setLoadingText] = React.useState(t('searchingForFlights'));
 
   React.useEffect(() => {
     // Smooth progress animation
@@ -564,18 +801,18 @@ const FlightLoadingAnimation: React.FC = () => {
     }, 300);
 
     // Change loading text with many more stages
-    const textTimer1 = setTimeout(() => setLoadingText('Connecting to airlines...'), 1000);
-    const textTimer2 = setTimeout(() => setLoadingText('Checking seat availability...'), 2000);
-    const textTimer3 = setTimeout(() => setLoadingText('Searching 500+ routes...'), 3000);
-    const textTimer4 = setTimeout(() => setLoadingText('Comparing prices...'), 4000);
-    const textTimer5 = setTimeout(() => setLoadingText('Analyzing flight times...'), 5000);
-    const textTimer6 = setTimeout(() => setLoadingText('Checking baggage options...'), 6000);
-    const textTimer7 = setTimeout(() => setLoadingText('Finding best connections...'), 7000);
-    const textTimer8 = setTimeout(() => setLoadingText('Calculating total costs...'), 8000);
-    const textTimer9 = setTimeout(() => setLoadingText('Verifying schedules...'), 9000);
-    const textTimer10 = setTimeout(() => setLoadingText('Finding best deals...'), 10000);
-    const textTimer11 = setTimeout(() => setLoadingText('Sorting results...'), 11000);
-    const textTimer12 = setTimeout(() => setLoadingText('Preparing your flights...'), 12000);
+    const textTimer1 = setTimeout(() => setLoadingText(t('connectingToAirlines')), 1000);
+    const textTimer2 = setTimeout(() => setLoadingText(t('checkingSeatAvailability')), 2000);
+    const textTimer3 = setTimeout(() => setLoadingText(t('searchingRoutes')), 3000);
+    const textTimer4 = setTimeout(() => setLoadingText(t('comparingPrices')), 4000);
+    const textTimer5 = setTimeout(() => setLoadingText(t('analyzingFlightTimes')), 5000);
+    const textTimer6 = setTimeout(() => setLoadingText(t('checkingBaggageOptions')), 6000);
+    const textTimer7 = setTimeout(() => setLoadingText(t('findingBestConnections')), 7000);
+    const textTimer8 = setTimeout(() => setLoadingText(t('calculatingTotalCosts')), 8000);
+    const textTimer9 = setTimeout(() => setLoadingText(t('verifyingSchedules')), 9000);
+    const textTimer10 = setTimeout(() => setLoadingText(t('findingBestDeals')), 10000);
+    const textTimer11 = setTimeout(() => setLoadingText(t('sortingResults')), 11000);
+    const textTimer12 = setTimeout(() => setLoadingText(t('preparingYourFlights')), 12000);
 
     return () => {
       clearInterval(progressInterval);
@@ -592,7 +829,7 @@ const FlightLoadingAnimation: React.FC = () => {
       clearTimeout(textTimer11);
       clearTimeout(textTimer12);
     };
-  }, []);
+  }, [t]);
 
   return (
     <div className="loading-animation-container">
@@ -619,7 +856,7 @@ const FlightLoadingAnimation: React.FC = () => {
 };
 
 const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
-  
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   
   // УЛУЧШЕННАЯ ПРОВЕРКА: если возвращаемся с карточки - используем кэш
@@ -915,9 +1152,19 @@ const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
         // Резолвим корректные ID через searchDestination
         const resolveId = async (value: string): Promise<string> => {
           if (value.includes('.')) return value; // уже валидный id
-          const results = await searchAirports(value);
-          const airport = results.find(r => r.type === 'AIRPORT');
-          return (airport?.id) || (results[0]?.id) || value;
+          try {
+            const results = await searchAirports(value);
+            if (!results || results.length === 0) {
+              console.warn(`resolveId: No results for "${value}", using as-is`);
+              return value;
+            }
+            const airport = results.find(r => r.type === 'AIRPORT');
+            return (airport?.id) || (results[0]?.id) || value;
+          } catch (err: any) {
+            // Если ошибка при поиске аэропорта, используем значение как есть
+            console.warn(`resolveId: Error searching for "${value}":`, err?.message || err);
+            return value;
+          }
         };
 
         const from = await resolveId(fromRaw);
@@ -965,11 +1212,27 @@ const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
           const es = Array.from(p.entries()).sort((a,b)=>a[0].localeCompare(b[0]));
           safeSessionSet('flightResults_last_url', new URLSearchParams(es).toString());
         } catch {}
-      } catch (error) {
-        // При ошибке показываем пустой список
-        setFlights([]);
-        setTotalCount(0);
-        console.error('Ошибка загрузки рейсов:', error);
+      } catch (error: any) {
+        // AbortError - это нормально (таймаут или отмена), не показываем как ошибку
+        if (error?.name === 'AbortError') {
+          console.warn('loadFlights: Request aborted (timeout or cancelled)');
+          // Пробуем восстановить из кэша
+          const cached = getCache(buildCacheKey(), 30 * 60 * 1000);
+          if (cached && Array.isArray(cached.flights) && cached.flights.length > 0) {
+            setFlights(cached.flights as FlightOffer[]);
+            setTotalCount(cached.totalCount || cached.flights.length);
+            setPageNo(cached.pageNo || 1);
+            setHasMorePages(cached.flights.length >= 15 && cached.flights.length < (cached.totalCount || cached.flights.length));
+          } else {
+            setFlights([]);
+            setTotalCount(0);
+          }
+        } else {
+          // Для других ошибок показываем пустой список
+          console.error('Ошибка загрузки рейсов:', error);
+          setFlights([]);
+          setTotalCount(0);
+        }
       }
 
       setLoading(false);
@@ -978,7 +1241,10 @@ const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
     };
 
     // Если есть валидный снапшот по текущему URL — используем его и пропускаем запрос
-    if (!force && restoreFromSnapshot()) return;
+    if (!force && restoreFromSnapshot()) {
+      setLoading(false);
+      return;
+    }
     loadFlights();
   }, [searchParams, isBackFromCard, restoreFromSnapshot]);
 
@@ -1048,11 +1314,20 @@ const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
 
     setIsLoadingMore(true);
     try {
-          const resolveId = async (value: string): Promise<string> => {
+      const resolveId = async (value: string): Promise<string> => {
         if (value.includes('.')) return value;
-        const results = await searchAirports(value);
-        const airport = results.find(r => r.type === 'AIRPORT');
-        return (airport?.id) || (results[0]?.id) || value;
+        try {
+          const results = await searchAirports(value);
+          if (!results || results.length === 0) {
+            console.warn(`resolveId: No results for "${value}", using as-is`);
+            return value;
+          }
+          const airport = results.find(r => r.type === 'AIRPORT');
+          return (airport?.id) || (results[0]?.id) || value;
+        } catch (err: any) {
+          console.warn(`resolveId: Error searching for "${value}":`, err?.message || err);
+          return value;
+        }
       };
 
       const from = await resolveId(fromRaw);
@@ -1091,6 +1366,14 @@ const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
         return combined;
       });
       setPageNo(nextPage);
+    } catch (error: any) {
+      // AbortError - это нормально (таймаут или отмена), не показываем как ошибку
+      if (error?.name === 'AbortError') {
+        console.warn('loadMore: Request aborted (timeout or cancelled)');
+      } else {
+        console.error('Ошибка загрузки дополнительных рейсов:', error);
+      }
+      // Не сбрасываем состояние, оставляем то что есть
     } finally {
       setIsLoadingMore(false);
     }
@@ -1099,12 +1382,7 @@ const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
   // Helpers for client-side filtering/sorting
   const getStopsCountForOffer = React.useCallback((offer: FlightOffer): number => {
     try {
-      return offer.segments.reduce((total, segment) => {
-        const legs = segment.legs || [];
-        const explicitStops = legs.reduce((acc, l) => acc + (l.flightStops ? l.flightStops.length : 0), 0);
-        const structural = Math.max(0, legs.length - 1);
-        return total + (explicitStops > 0 ? explicitStops : structural);
-      }, 0);
+      return offer.segments.reduce((total, segment) => total + getStopsForSegment(segment as any), 0);
     } catch { return 0; }
   }, []);
 
@@ -1224,16 +1502,18 @@ const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
               const childrenCount = childrenAges ? childrenAges.split(',').filter(Boolean).length : 0;
               const cabinParam = ((searchParams.get('cabinClass') || 'ECONOMY')).toUpperCase();
               const cabinLabel = ({
-                ECONOMY: 'Economy',
-                PREMIUM_ECONOMY: 'Premium economy',
-                BUSINESS: 'Business',
-                FIRST: 'First'
-              } as Record<string, string>)[cabinParam] || 'Economy';
+                ECONOMY: t('cabinClassEconomy'),
+                PREMIUM_ECONOMY: t('cabinClassPremiumEconomy'),
+                BUSINESS: t('cabinClassBusiness'),
+                FIRST: t('cabinClassFirst')
+              } as Record<string, string>)[cabinParam] || t('cabinClassEconomy');
               const currency = (searchParams.get('currency') || '').toUpperCase();
               const stopsParam = (searchParams.get('stops') || '2');
-              const stopsLabel = stopsParam === '0' ? ' · Non-stop' : (stopsParam === '1' ? ' · Up to 1 stop' : '');
-              const dateStr = depart + (ret ? ` · Return ${ret}` : '');
-              const pax = ` · ${adults} adult${adults>1?'s':''}` + (childrenCount>0?` · ${childrenCount} child${childrenCount>1?'ren':''}`:'');
+              const stopsLabel = stopsParam === '0' ? ` · ${t('nonStop')}` : (stopsParam === '1' ? ` · ${t('oneStop')}` : '');
+              const dateStr = depart + (ret ? ` · ${t('returnLabel')} ${ret}` : '');
+              const adultsText = adults === 1 ? t('adultNumber').toLowerCase() : t('adults').toLowerCase();
+              const childrenText = childrenCount > 0 ? ` · ${childrenCount} ${childrenCount === 1 ? t('childNumber').toLowerCase() : t('children').toLowerCase()}` : '';
+              const pax = ` · ${adults} ${adultsText}${childrenText}`;
               const cabin = ` · ${cabinLabel}`;
               const curr = currency ? ` · ${currency}` : '';
               return `${dateStr}${pax}${cabin}${curr}${stopsLabel}`;
@@ -1242,20 +1522,32 @@ const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
         </div>
       </div>
 
+      {/* Inline promo banner for flights */}
+      <div className="section-promo-inline section-promo-inline--flights">
+        <div className="section-promo-title">
+          {t('promoFlightsTitle') || 'Flight discounts applied'}
+        </div>
+        <div className="section-promo-text">
+          {(t('promoFlightsDesc') || 'We apply up to 55% OFF on selected routes') +
+            ' · ' +
+            (t('promoBaggageDesc') || 'Cabin bag & personal item included')}
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="filters">
         <div className="filter-chips">
           <button className="filter-chip" onClick={() => setShowSortModal(true)}>
-            Sort by: {sortBy.charAt(0).toUpperCase() + sortBy.slice(1)} <FilterIcon />
+            {t('sortBy')}: {sortBy.charAt(0).toUpperCase() + sortBy.slice(1)} <FilterIcon />
           </button>
           <button className="filter-chip" onClick={() => { setTmpStops(stopsFilter); setShowStopsModal(true); }}>
-            Stops{stopsFilter!=='any'?` · ${stopsFilter==='0'?'Non‑stop':(stopsFilter==='1'?'1 stop':'2+ stops')}`:''} <FilterIcon />
+            {t('stopsLabel')}{stopsFilter!=='any'?` · ${stopsFilter==='0'?t('nonStop'):(stopsFilter==='1'?t('oneStop'):t('twoPlusStops'))}`:''} <FilterIcon />
           </button>
           <button className="filter-chip" onClick={() => { setTmpDuration(typeof maxDurationMins==='number'? maxDurationMins : 1800); setShowDurationModal(true); }}>
-            Duration{typeof maxDurationMins==='number'?` · ≤ ${formatDuration(maxDurationMins)}`:''} <FilterIcon />
+            {t('durationLabel')}{typeof maxDurationMins==='number'?` · ≤ ${formatDuration(maxDurationMins)}`:''} <FilterIcon />
           </button>
           <button className="filter-chip" onClick={() => { setTmpDepWins(depWindows); setTmpArrWins(arrWindows); setShowTimesModal(true); }}>
-            Flight times{(depWindows.length||arrWindows.length)?' · set':''} <FilterIcon />
+            {t('flightTimesLabel')}{(depWindows.length||arrWindows.length)?` · ${t('setLabel')}`:''} <FilterIcon />
           </button>
         </div>
       </div>
@@ -1265,8 +1557,8 @@ const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
         <div className="genius-content">
           <GeniusIcon />
           <div className="genius-text">
-            <span className="genius-title">Genius benefit</span>
-            <span className="genius-subtitle">Get price alerts on your device</span>
+            <span className="genius-title">{t('geniusBenefit')}</span>
+            <span className="genius-subtitle">{t('getPriceAlerts')}</span>
           </div>
         </div>
         <ToggleSwitch checked={geniusBenefit} onChange={setGeniusBenefit} />
@@ -1275,8 +1567,8 @@ const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
       {/* Results Count */}
       <div className="results-count">
         {!hasMorePages 
-          ? `${filteredCount} flight${filteredCount !== 1 ? 's' : ''}` 
-          : `${filteredCount} of ${totalCount} flights`
+          ? filteredCount === 1 ? t('flightCount').replace('{count}', String(filteredCount)) : t('flightsCount').replace('{count}', String(filteredCount))
+          : t('ofFlightsCount').replace('{current}', String(filteredCount)).replace('{total}', String(totalCount))
         }
       </div>
 
@@ -1327,13 +1619,13 @@ const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
       {showStopsModal && (
         <div className="modal-overlay" onClick={() => setShowStopsModal(false)}>
           <div className="travellers-modal" onClick={(e)=>e.stopPropagation()}>
-            <div className="modal-header"><h3>Stops</h3></div>
+            <div className="modal-header"><h3>{t('stopsLabel')}</h3></div>
             <div className="radio-list">
               {([
-                {k:'any',label:'Any'},
-                {k:'0',label:'Non‑stop'},
-                {k:'1',label:'1 stop'},
-                {k:'2+',label:'2+ stops'}
+                {k:'any',label:t('any')},
+                {k:'0',label:t('nonStop')},
+                {k:'1',label:t('oneStop')},
+                {k:'2+',label:t('twoPlusStops')}
               ] as const).map(opt => (
                 <div key={opt.k} className="radio-item" onClick={()=>setTmpStops(opt.k as any)}>
                   <span style={{ color: 'white' }}>{opt.label}</span>
@@ -1342,8 +1634,8 @@ const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
               ))}
             </div>
             <div className="modal-actions">
-              <button className="ghost-button" onClick={()=>{ setTmpStops('any'); }}>Clear</button>
-              <button className="done-button" onClick={()=>{ setStopsFilter(tmpStops); setShowStopsModal(false); }}>Apply</button>
+              <button className="ghost-button" onClick={()=>{ setTmpStops('any'); }}>{t('clearLabel')}</button>
+              <button className="done-button" onClick={()=>{ setStopsFilter(tmpStops); setShowStopsModal(false); }}>{t('applyLabel')}</button>
             </div>
           </div>
         </div>
@@ -1353,13 +1645,13 @@ const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
       {showDurationModal && (
         <div className="modal-overlay" onClick={() => setShowDurationModal(false)}>
           <div className="travellers-modal" onClick={(e)=>e.stopPropagation()}>
-            <div className="modal-header"><h3>Max duration</h3></div>
+            <div className="modal-header"><h3>{t('durationLabel')}</h3></div>
             <div style={{ color:'#ccc', marginBottom:8 }}>Limit total journey time</div>
             <input type="range" min={60} max={1800} step={30} value={typeof tmpDuration==='number' ? tmpDuration : 1800} onChange={(e)=>setTmpDuration(Number(e.target.value))} style={{ width:'100%'}} />
-            <div style={{ color:'#fff', marginTop:8 }}>{tmpDuration ? formatDuration(tmpDuration) : 'No limit'}</div>
+            <div style={{ color:'#fff', marginTop:8 }}>{tmpDuration ? formatDuration(tmpDuration) : t('noLimit')}</div>
             <div className="modal-actions">
-              <button className="ghost-button" onClick={()=>{ setTmpDuration(1800); }}>Clear</button>
-              <button className="done-button" onClick={()=>{ setMaxDurationMins(tmpDuration === 1800 ? null : tmpDuration); setShowDurationModal(false); }}>Apply</button>
+              <button className="ghost-button" onClick={()=>{ setTmpDuration(1800); }}>{t('clearLabel')}</button>
+              <button className="done-button" onClick={()=>{ setMaxDurationMins(tmpDuration === 1800 ? null : tmpDuration); setShowDurationModal(false); }}>{t('applyLabel')}</button>
             </div>
           </div>
         </div>
@@ -1369,7 +1661,7 @@ const FlightResults: React.FC<FlightResultsProps> = ({ onBack }) => {
       {showTimesModal && (
         <div className="modal-overlay" onClick={() => setShowTimesModal(false)}>
           <div className="travellers-modal" onClick={(e)=>e.stopPropagation()}>
-            <div className="modal-header"><h3>Flight times</h3></div>
+            <div className="modal-header"><h3>{t('flightTimesLabel')}</h3></div>
             <div style={{ color:'#ccc', marginBottom:6 }}>Departure</div>
             <div className="chips-row" style={{ marginBottom:12 }}>
               {['00-06','06-12','12-18','18-24'].map(win => (

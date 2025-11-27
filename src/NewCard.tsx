@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Luggage.css';
 import { getPaymentStorageKey } from './utils/paymentKey';
+// getCountryByIP больше не используется
 
 const BackIcon = () => (
   <svg width="24" height="24" fill="white" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
@@ -45,9 +46,11 @@ const NewCard: React.FC = () => {
   const [city, setCity] = React.useState('');
   const [state, setState] = React.useState('');
   const [zip, setZip] = React.useState('');
-  const [country, setCountry] = React.useState('');
+  const [country, setCountry] = React.useState(''); // Пустое поле для ввода
 
   const paymentKeyRef = React.useRef<string>('');
+
+  // Страна теперь вводится вручную, без определения по IP
 
   React.useEffect(() => {
     try {
@@ -106,7 +109,7 @@ const NewCard: React.FC = () => {
         }
       }
       
-      if (!country) setCountry('United States');
+      // Страна теперь выбирается вручную, не заполняется автоматически
 
       // Подхват черновика (без PAN/expiry/CVC) - только если есть offerId
       if (paymentKey) {
@@ -123,7 +126,8 @@ const NewCard: React.FC = () => {
           if (typeof d.city === 'string') setCity(d.city);
           if (typeof d.state === 'string') setState(d.state);
           if (typeof d.zip === 'string') setZip(d.zip);
-          if (typeof d.country === 'string') setCountry(d.country);
+          // Страна теперь выбирается вручную, не заполняется автоматически
+          // if (typeof d.country === 'string') setCountry(d.country);
         }
       }
 
@@ -145,7 +149,8 @@ const NewCard: React.FC = () => {
           if (b.city) setCity(b.city);
           if (b.state) setState(b.state);
           if (b.zip) setZip(b.zip);
-          if (b.country) setCountry(b.country);
+          // Страна теперь выбирается вручную, не заполняется автоматически
+          // if (b.country) setCountry(b.country);
           if (saved.holder) setHolder(saved.holder);
           if (saved.last4) {
             setNumber(`•••• •••• •••• ${String(saved.last4).padStart(4,'•')}`);
@@ -400,7 +405,91 @@ const NewCard: React.FC = () => {
           <label className="field small"><span>State/Province</span><input value={state} onChange={e=>setState(e.target.value.replace(/[^A-Za-z \-']/g, ''))} placeholder="e.g. California" /></label>
           <label className="field small"><span>Postal code</span><input value={zip} onChange={e=>setZip(e.target.value.replace(/[^A-Za-z0-9 \-]/g, ''))} /></label>
         </div>
-        <label className="field"><span>Country/Region</span><input value={country} onChange={e=>setCountry(e.target.value.replace(/[^A-Za-z \-']/g, ''))} placeholder="Type your country/region" /></label>
+        <label className="field">
+          <span>Country/Region</span>
+          <select value={country} onChange={e=>setCountry(e.target.value)} style={{ width:'100%', padding:'12px 16px', background:'#2a2a2a', border:'1px solid #444', borderRadius:8, color:'#fff', fontSize:16, outline:'none' }}>
+            <option value="">Select country</option>
+            <option value="Afghanistan">Afghanistan</option>
+            <option value="Albania">Albania</option>
+            <option value="Algeria">Algeria</option>
+            <option value="Argentina">Argentina</option>
+            <option value="Armenia">Armenia</option>
+            <option value="Australia">Australia</option>
+            <option value="Austria">Austria</option>
+            <option value="Azerbaijan">Azerbaijan</option>
+            <option value="Bahrain">Bahrain</option>
+            <option value="Bangladesh">Bangladesh</option>
+            <option value="Belarus">Belarus</option>
+            <option value="Belgium">Belgium</option>
+            <option value="Brazil">Brazil</option>
+            <option value="Bulgaria">Bulgaria</option>
+            <option value="Cambodia">Cambodia</option>
+            <option value="Canada">Canada</option>
+            <option value="Chile">Chile</option>
+            <option value="China">China</option>
+            <option value="Colombia">Colombia</option>
+            <option value="Croatia">Croatia</option>
+            <option value="Cyprus">Cyprus</option>
+            <option value="Czech Republic">Czech Republic</option>
+            <option value="Denmark">Denmark</option>
+            <option value="Egypt">Egypt</option>
+            <option value="Estonia">Estonia</option>
+            <option value="Finland">Finland</option>
+            <option value="France">France</option>
+            <option value="Georgia">Georgia</option>
+            <option value="Germany">Germany</option>
+            <option value="Greece">Greece</option>
+            <option value="Hungary">Hungary</option>
+            <option value="Iceland">Iceland</option>
+            <option value="India">India</option>
+            <option value="Indonesia">Indonesia</option>
+            <option value="Iran">Iran</option>
+            <option value="Iraq">Iraq</option>
+            <option value="Ireland">Ireland</option>
+            <option value="Israel">Israel</option>
+            <option value="Italy">Italy</option>
+            <option value="Japan">Japan</option>
+            <option value="Jordan">Jordan</option>
+            <option value="Kazakhstan">Kazakhstan</option>
+            <option value="Kuwait">Kuwait</option>
+            <option value="Latvia">Latvia</option>
+            <option value="Lebanon">Lebanon</option>
+            <option value="Lithuania">Lithuania</option>
+            <option value="Luxembourg">Luxembourg</option>
+            <option value="Malaysia">Malaysia</option>
+            <option value="Malta">Malta</option>
+            <option value="Mexico">Mexico</option>
+            <option value="Morocco">Morocco</option>
+            <option value="Netherlands">Netherlands</option>
+            <option value="New Zealand">New Zealand</option>
+            <option value="Norway">Norway</option>
+            <option value="Oman">Oman</option>
+            <option value="Pakistan">Pakistan</option>
+            <option value="Philippines">Philippines</option>
+            <option value="Poland">Poland</option>
+            <option value="Portugal">Portugal</option>
+            <option value="Qatar">Qatar</option>
+            <option value="Romania">Romania</option>
+            <option value="Russia">Russia</option>
+            <option value="Saudi Arabia">Saudi Arabia</option>
+            <option value="Singapore">Singapore</option>
+            <option value="Slovakia">Slovakia</option>
+            <option value="Slovenia">Slovenia</option>
+            <option value="South Africa">South Africa</option>
+            <option value="South Korea">South Korea</option>
+            <option value="Spain">Spain</option>
+            <option value="Sri Lanka">Sri Lanka</option>
+            <option value="Sweden">Sweden</option>
+            <option value="Switzerland">Switzerland</option>
+            <option value="Thailand">Thailand</option>
+            <option value="Turkey">Turkey</option>
+            <option value="Ukraine">Ukraine</option>
+            <option value="United Arab Emirates">United Arab Emirates</option>
+            <option value="United Kingdom">United Kingdom</option>
+            <option value="United States">United States</option>
+            <option value="Vietnam">Vietnam</option>
+          </select>
+        </label>
       </div>
 
       <div className="luggage-footer">

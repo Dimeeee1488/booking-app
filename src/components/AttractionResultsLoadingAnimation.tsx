@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from '../hooks/useTranslation';
 import './AttractionResultsLoadingAnimation.css';
 
 interface AttractionResultsLoadingAnimationProps {
@@ -12,6 +13,7 @@ const AttractionResultsLoadingAnimation: React.FC<AttractionResultsLoadingAnimat
   date, 
   onBack 
 }) => {
+  const { t } = useTranslation();
   const [progress, setProgress] = useState(0);
   const [loadingText, setLoadingText] = useState('Searching attractions...');
 
@@ -50,7 +52,7 @@ const AttractionResultsLoadingAnimation: React.FC<AttractionResultsLoadingAnimat
           ←
         </button>
         <div className="header-info">
-          <h1 className="loading-title">Attractions in {locationName}</h1>
+          <h1 className="loading-title">{t('attractionsIn')} {locationName}</h1>
           {date && <p className="loading-date">{date}</p>}
         </div>
         <div className="header-spacer"></div>

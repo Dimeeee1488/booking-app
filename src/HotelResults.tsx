@@ -3,6 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import HotelDetailsLoadingAnimation from './components/HotelDetailsLoadingAnimation';
 import HotelResultsLoadingAnimation from './components/HotelResultsLoadingAnimation';
 import './HotelResults.css';
+import { getPreferredLanguageCode, subscribeToPreferredLanguage } from './utils/language';
+import { useTranslation } from './hooks/useTranslation';
+import { calculatePromoDiscount, getPromoBadgeText } from './utils/promoUtils';
 
 // Favorites storage utility
 const FAVORITES_KEY = 'hotel_favorites';
@@ -37,9 +40,11 @@ interface HotelProperty {
     grossPrice?: {
       value?: number;
       currency?: string;
+      isTotal?: boolean; // true если цена уже включает все комнаты
     };
     strikethroughPrice?: {
       value?: number;
+      isTotal?: boolean; // true если цена уже включает все комнаты
     };
     excludedPrice?: {
       value?: number;
@@ -93,7 +98,7 @@ const CURRENCIES: Currency[] = [
 ];
 
 const getCacheKey = (params: any) => {
-  return `hotel_search_${params.dest_id}_${params.arrival_date}_${params.departure_date}_${params.adults}_${params.children}_${params.rooms}_${params.currency}`;
+  return `hotel_search_${params.dest_id}_${params.arrival_date}_${params.departure_date}_${params.adults}_${params.children}_${params.rooms}_${params.currency}_${params.language || 'en-us'}`;
 };
 
 // Normalize different API schemas to our internal HotelProperty shape
@@ -120,19 +125,35 @@ const normalizeApiHotel = (raw: any, index: number): HotelProperty => {
   const accuratePropertyClass = raw?.property?.accuratePropertyClass ?? raw?.class;
 
   // Price breakdown across schemas
+  // ПРОБЛЕМА: API для списка и деталей может возвращать разные форматы цен
+  // В списке: priceBreakdown.grossPrice.value обычно за одну комнату
+  // В деталях: composite_price_breakdown.gross_amount.value уже включает все комнаты (room_qty передается в запрос)
+  // РЕШЕНИЕ: В списке всегда используем priceBreakdown если есть, и умножаем на room_qty
+  // В деталях используем composite_price_breakdown как есть (уже включает room_qty)
+  
+  // Приоритет: priceBreakdown > composite_price_breakdown > min_total_price
   const priceValue = raw?.priceBreakdown?.grossPrice?.value
     || raw?.property?.priceBreakdown?.grossPrice?.value
     || raw?.price_breakdown?.gross_price?.value
-    || raw?.composite_price_breakdown?.gross_amount?.value
-    || raw?.min_total_price
     || undefined;
+  
+  // composite_price_breakdown используем только если нет priceBreakdown
+  // В списке результатов composite_price_breakdown обычно тоже за одну комнату
+  const compositePrice = priceValue === undefined 
+    ? (raw?.composite_price_breakdown?.gross_amount?.value || raw?.min_total_price)
+    : undefined;
 
+  // Сначала пробуем priceBreakdown.strikethroughPrice (обычно за одну комнату)
   const strikethroughValue = raw?.priceBreakdown?.strikethroughPrice?.value
     || raw?.property?.priceBreakdown?.strikethroughPrice?.value
     || raw?.price_breakdown?.strikethrough_price?.value
-    || raw?.composite_price_breakdown?.strikethrough_amount?.value
     || raw?.crossed_out_price
     || undefined;
+  
+  // composite_price_breakdown.strikethrough_amount используем только если нет priceBreakdown
+  const compositeStrikethrough = strikethroughValue === undefined
+    ? raw?.composite_price_breakdown?.strikethrough_amount?.value
+    : undefined;
 
   const benefitBadges = (raw?.priceBreakdown?.benefitBadges)
     || (raw?.property?.priceBreakdown?.benefitBadges)
@@ -161,9 +182,21 @@ const normalizeApiHotel = (raw: any, index: number): HotelProperty => {
       wishlistName: raw?.wishlistName,
     },
     accessibilityLabel,
-    priceBreakdown: (priceValue || strikethroughValue || benefitBadges.length > 0) ? {
-      grossPrice: priceValue !== undefined ? { value: Number(priceValue), currency: raw?.currency_code } : undefined,
-      strikethroughPrice: strikethroughValue !== undefined ? { value: Number(strikethroughValue) } : undefined,
+    priceBreakdown: (priceValue || compositePrice || strikethroughValue || benefitBadges.length > 0) ? {
+      // ВАЖНО: В списке результатов API обычно возвращает цену за одну комнату
+      // composite_price_breakdown в списке результатов тоже обычно за одну комнату
+      // Поэтому НЕ помечаем compositePrice как isTotal, чтобы он умножился на количество комнат
+      // Это обеспечит совпадение с деталями, где composite_price_breakdown уже включает все комнаты
+      grossPrice: priceValue !== undefined
+        ? { value: Number(priceValue), currency: raw?.currency_code } 
+        : compositePrice !== undefined
+          ? { value: Number(compositePrice), currency: raw?.currency_code || raw?.composite_price_breakdown?.gross_amount?.currency, isTotal: false }
+          : undefined,
+      strikethroughPrice: strikethroughValue !== undefined 
+        ? { value: Number(strikethroughValue), isTotal: false } 
+        : compositeStrikethrough !== undefined
+          ? { value: Number(compositeStrikethrough), isTotal: false }
+          : undefined,
       excludedPrice: excludedPrice ? { value: Number(excludedPrice.value), currency: excludedPrice.currency } : undefined,
       benefitBadges,
     } : undefined,
@@ -175,6 +208,7 @@ const normalizeApiHotel = (raw: any, index: number): HotelProperty => {
 
 const HotelResults = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [hotels, setHotels] = useState<HotelProperty[]>([]);
   const [allHotels, setAllHotels] = useState<HotelProperty[]>([]);
@@ -212,6 +246,14 @@ const HotelResults = () => {
   const children = searchParams.get('children_age') || '';
   const rooms = searchParams.get('room_qty') || '1';
   const currency = searchParams.get('currency_code') || 'AED';
+  const [languageCode, setLanguageCode] = useState(getPreferredLanguageCode());
+
+  useEffect(() => {
+    const unsubscribe = subscribeToPreferredLanguage((language) => {
+      setLanguageCode(language.code);
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     setSelectedCurrency(currency);
@@ -231,7 +273,7 @@ const HotelResults = () => {
     }
   }, []);
 
-  const searchKey = getCacheKey({ dest_id: destId, arrival_date: checkIn, departure_date: checkOut, adults, children, rooms, currency });
+  const searchKey = getCacheKey({ dest_id: destId, arrival_date: checkIn, departure_date: checkOut, adults, children, rooms, currency, language: languageCode });
 
   useEffect(() => {
     const fetchHotels = async () => {
@@ -263,7 +305,7 @@ const HotelResults = () => {
         const childrenParam = children ? `&children_age=${children}` : '';
         // Загружаем только первую страницу при первоначальном поиске
         const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
-        const apiUrl = `${apiBaseUrl}/hotels/searchHotels?dest_id=${destId}&search_type=${searchType}&arrival_date=${checkIn}&departure_date=${checkOut}&adults=${adults}${childrenParam}&room_qty=${rooms}&page_number=1&page_size=100&units=metric&temperature_unit=c&languagecode=en-us&currency_code=${currency}&location=US`;
+        const apiUrl = `${apiBaseUrl}/hotels/searchHotels?dest_id=${destId}&search_type=${searchType}&arrival_date=${checkIn}&departure_date=${checkOut}&adults=${adults}${childrenParam}&room_qty=${rooms}&page_number=1&page_size=100&units=metric&temperature_unit=c&languagecode=${languageCode}&currency_code=${currency}&location=US`;
         
         console.log('🔍 Hotel search parameters:', {
           destId,
@@ -272,7 +314,8 @@ const HotelResults = () => {
           adults,
           children,
           rooms,
-          currency
+          currency,
+          languageCode,
         });
         console.log('🌐 API URL:', apiUrl);
         console.log('📱 User Agent:', navigator.userAgent);
@@ -281,29 +324,34 @@ const HotelResults = () => {
         
         let finalApiUrl = apiUrl;
         
+        // Добавляем таймаут для запроса (30 секунд)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
         
-        const response = await fetch(finalApiUrl, {
-          method: 'GET',
-        });
+        try {
+          const response = await fetch(finalApiUrl, {
+            method: 'GET',
+            signal: controller.signal,
+          });
+          
+          clearTimeout(timeoutId);
 
-        console.log('Response status:', response.status);
-        console.log('Response headers:', response.headers);
-        console.log('Response ok:', response.ok);
+          console.log('Response status:', response.status);
+          console.log('Response headers:', response.headers);
+          console.log('Response ok:', response.ok);
 
-        if (!response.ok) {
-          console.error('API request failed:', response.status, response.statusText);
-          throw new Error(`Failed to fetch hotels: ${response.status} ${response.statusText}`);
-        }
+          if (!response.ok) {
+            console.error('API request failed:', response.status, response.statusText);
+            throw new Error(`Failed to fetch hotels: ${response.status} ${response.statusText}`);
+          }
 
-        const data = await response.json();
+          const data = await response.json();
         
-        console.log('📊 API response:', data);
-        console.log('✅ Response status:', data.status);
-        console.log('📋 Response data:', data.data);
-        
-        
-        
-        if (data.status && data.data) {
+          console.log('📊 API response:', data);
+          console.log('✅ Response status:', data.status);
+          console.log('📋 Response data:', data.data);
+          
+          if (data.status && data.data) {
           // В API byCoordinates данные лежат в data.result
           // Приводим к единому виду и нормализуем
           const rawList = Array.isArray(data.data?.hotels)
@@ -354,20 +402,75 @@ const HotelResults = () => {
             // Always set hasMorePages to true initially to allow loading more
             setHasMorePages(true);
           } else {
-            console.error('❌ No hotels found in response');
+            console.error('❌ No hotels found in response, trying cache fallback');
+            const cached = sessionStorage.getItem(searchKey);
+            if (cached) {
+              try {
+                const cachedData: HotelProperty[] = JSON.parse(cached);
+                if (Array.isArray(cachedData) && cachedData.length > 0) {
+                  setAllHotels(cachedData);
+                  setHotels(cachedData.slice(0, displayCount));
+                  setHasMorePages(false);
+                  return;
+                }
+              } catch (parseErr) {
+                console.error('Failed to parse cached hotels:', parseErr);
+              }
+            }
             setError('No hotels found for your search criteria.');
             setHasMorePages(false);
+            setLoading(false);
           }
+        } else {
+          setError('Invalid response from server. Please try again.');
+          setLoading(false);
+          setHasMorePages(false);
         }
-      } catch (err) {
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId);
+          if (fetchError.name === 'AbortError') {
+            throw new Error('Request timeout. Please try again.');
+          }
+          throw fetchError;
+        }
+      } catch (err: any) {
         console.error('Error fetching hotels:', err);
         console.error('Error details:', {
-          message: err.message,
-          stack: err.stack,
+          message: err?.message || 'Unknown error',
+          stack: err?.stack,
           userAgent: navigator.userAgent,
           isMobile: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
         });
-        setError(`Failed to load hotels. Please try again. Error: ${err.message}`);
+
+        // Пытаемся использовать кеш как фолбэк при ошибке API/сети
+        const cached = sessionStorage.getItem(searchKey);
+        if (cached) {
+          try {
+            const cachedData: HotelProperty[] = JSON.parse(cached);
+            if (Array.isArray(cachedData) && cachedData.length > 0) {
+              console.warn('Using cached hotels due to fetch error');
+              setAllHotels(cachedData);
+              setHotels(cachedData.slice(0, displayCount));
+              setHasMorePages(false);
+              const errorMessage = err?.name === 'AbortError' 
+                ? 'Request timeout. Showing previously loaded hotels.'
+                : 'Unable to refresh hotels. Showing previously loaded results.';
+              setError(errorMessage);
+              return;
+            }
+          } catch (parseErr) {
+            console.error('Failed to parse cached hotels in error handler:', parseErr);
+          }
+        }
+
+        const errorMessage = err?.name === 'AbortError' 
+          ? 'Request timeout. Please try again.' 
+          : `Failed to load hotels. Please try again. Error: ${err?.message || 'Load failed'}`;
+        setError(errorMessage);
+        setHasMorePages(false);
+        // Если кеша нет, очищаем чтобы явно показать отсутствие результатов
+        setAllHotels([]);
+        setHotels([]);
       } finally {
         setLoading(false);
       }
@@ -376,7 +479,7 @@ const HotelResults = () => {
     if (destId && checkIn && checkOut) {
       fetchHotels();
     }
-  }, [destId, checkIn, checkOut, adults, children, rooms, currency, searchKey, displayCount]);
+  }, [destId, checkIn, checkOut, adults, children, rooms, currency, searchKey, displayCount, languageCode]);
 
   // Helper to get numeric values safely
   const getHotelPrice = (h: HotelProperty): number | undefined => {
@@ -464,106 +567,125 @@ const HotelResults = () => {
       const nextPage = currentPage + 1;
       
       const childrenParam = children ? `&children_age=${children}` : '';
-      const apiBaseUrl = '/api';
-      const apiUrl = `${apiBaseUrl}/hotels/searchHotels?dest_id=${destId}&search_type=${searchType}&arrival_date=${checkIn}&departure_date=${checkOut}&adults=${adults}${childrenParam}&room_qty=${rooms}&page_number=${nextPage}&page_size=100&units=metric&temperature_unit=c&languagecode=en-us&currency_code=${currency}&location=US`;
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+      const apiUrl = `${apiBaseUrl}/hotels/searchHotels?dest_id=${destId}&search_type=${searchType}&arrival_date=${checkIn}&departure_date=${checkOut}&adults=${adults}${childrenParam}&room_qty=${rooms}&page_number=${nextPage}&page_size=100&units=metric&temperature_unit=c&languagecode=${languageCode}&currency_code=${currency}&location=US`;
       
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch more hotels');
-      }
-
-      const data = await response.json();
+      // Добавляем таймаут для запроса (30 секунд)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
       
-      if (data.status && data.data) {
-        const rawList = Array.isArray(data.data?.hotels)
-          ? data.data.hotels
-          : Array.isArray(data.data?.result)
-            ? data.data.result
-            : (Array.isArray(data.data) ? data.data : []);
-
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          signal: controller.signal,
+        });
         
-        if (rawList.length === 0) {
-          setHasMorePages(false);
-          alert('Все отели загружены!');
-        } else {
-          const newHotels: HotelProperty[] = rawList.map((item: any, idx: number) => normalizeApiHotel(item, idx));
-          
-          // Добавляем новые отели к существующим, избегая дубликатов
-          setAllHotels(prev => {
-            const existingIds = new Set(prev.map(hotel => hotel.hotel_id));
-            const uniqueNewHotels = newHotels.filter(hotel => !existingIds.has(hotel.hotel_id));
-            
-            // Дополнительная проверка на дубликаты внутри новых отелей
-            const finalUniqueHotels = uniqueNewHotels.filter((hotel, index, self) => 
-              index === self.findIndex(h => h.hotel_id === hotel.hotel_id)
-            );
-            
-            const updated = [...prev, ...finalUniqueHotels];
-            // Обновляем кэш только если данных не слишком много
-            try {
-              if (updated.length <= 1000) { // Ограничиваем кэш до 1000 отелей
-                sessionStorage.setItem(searchKey, JSON.stringify(updated));
-              } else {
-              }
-            } catch (error) {
-            }
-            return updated;
-          });
-          setCurrentPage(nextPage);
-          
-          // Просто обновляем отображаемые отели
-          setAllHotels(currentAllHotels => {
-            // Применяем фильтры и сортировку к обновленному списку
-            let list = currentAllHotels.filter((h) => {
-              const price = getHotelPrice(h);
-              if (filters.minPrice !== undefined && (price === undefined || price < filters.minPrice)) return false;
-              if (filters.maxPrice !== undefined && (price === undefined || price > filters.maxPrice)) return false;
-              if (filters.minRating !== undefined && getHotelRating(h) < filters.minRating) return false;
-              if (filters.stars.length > 0 && !filters.stars.includes(getHotelStars(h))) return false;
-              if (filters.preferredOnly && !h.property?.isPreferred) return false;
-              if (filters.mobileOnly && !(h.priceBreakdown?.benefitBadges || []).some(b => (b.text || '').toLowerCase().includes('mobile'))) return false;
-              return true;
-            });
+        clearTimeout(timeoutId);
 
-            // Сортируем
-            const sortKey = sortBy;
-            list = [...list].sort((a, b) => {
-              const priceA = getHotelPrice(a) ?? Number.POSITIVE_INFINITY;
-              const priceB = getHotelPrice(b) ?? Number.POSITIVE_INFINITY;
-              const ratingA = getHotelRating(a);
-              const ratingB = getHotelRating(b);
-              const starsA = getHotelStars(a);
-              const starsB = getHotelStars(b);
-              switch (sortKey) {
-                case 'price_low':
-                  return priceA - priceB;
-                case 'price_high':
-                  return priceB - priceA;
-                case 'rating':
-                  return ratingB - ratingA;
-                case 'stars':
-                  return starsB - starsA;
-                default:
-                  return 0;
-              }
-            });
-
-            setFilteredHotels(list);
-            setHotels(list);
-            
-            return currentAllHotels;
-          });
-        
-        // Всегда оставляем возможность загрузить еще больше отелей
-        setHasMorePages(true);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch more hotels: ${response.status} ${response.statusText}`);
         }
+
+        const data = await response.json();
+        
+        if (data.status && data.data) {
+          const rawList = Array.isArray(data.data?.hotels)
+            ? data.data.hotels
+            : Array.isArray(data.data?.result)
+              ? data.data.result
+              : (Array.isArray(data.data) ? data.data : []);
+
+          if (rawList.length === 0) {
+            setHasMorePages(false);
+            alert('Все отели загружены!');
+          } else {
+            const newHotels: HotelProperty[] = rawList.map((item: any, idx: number) => normalizeApiHotel(item, idx));
+            
+            // Добавляем новые отели к существующим, избегая дубликатов
+            setAllHotels(prev => {
+              const existingIds = new Set(prev.map(hotel => hotel.hotel_id));
+              const uniqueNewHotels = newHotels.filter(hotel => !existingIds.has(hotel.hotel_id));
+              
+              // Дополнительная проверка на дубликаты внутри новых отелей
+              const finalUniqueHotels = uniqueNewHotels.filter((hotel, index, self) => 
+                index === self.findIndex(h => h.hotel_id === hotel.hotel_id)
+              );
+              
+              const updated = [...prev, ...finalUniqueHotels];
+              // Обновляем кэш только если данных не слишком много
+              try {
+                if (updated.length <= 1000) { // Ограничиваем кэш до 1000 отелей
+                  sessionStorage.setItem(searchKey, JSON.stringify(updated));
+                }
+              } catch (error) {
+              }
+              return updated;
+            });
+            setCurrentPage(nextPage);
+            
+            // Просто обновляем отображаемые отели
+            setAllHotels(currentAllHotels => {
+              // Применяем фильтры и сортировку к обновленному списку
+              let list = currentAllHotels.filter((h) => {
+                const price = getHotelPrice(h);
+                if (filters.minPrice !== undefined && (price === undefined || price < filters.minPrice)) return false;
+                if (filters.maxPrice !== undefined && (price === undefined || price > filters.maxPrice)) return false;
+                if (filters.minRating !== undefined && getHotelRating(h) < filters.minRating) return false;
+                if (filters.stars.length > 0 && !filters.stars.includes(getHotelStars(h))) return false;
+                if (filters.preferredOnly && !h.property?.isPreferred) return false;
+                if (filters.mobileOnly && !(h.priceBreakdown?.benefitBadges || []).some(b => (b.text || '').toLowerCase().includes('mobile'))) return false;
+                return true;
+              });
+
+              // Сортируем
+              const sortKey = sortBy;
+              list = [...list].sort((a, b) => {
+                const priceA = getHotelPrice(a) ?? Number.POSITIVE_INFINITY;
+                const priceB = getHotelPrice(b) ?? Number.POSITIVE_INFINITY;
+                const ratingA = getHotelRating(a);
+                const ratingB = getHotelRating(b);
+                const starsA = getHotelStars(a);
+                const starsB = getHotelStars(b);
+                switch (sortKey) {
+                  case 'price_low':
+                    return priceA - priceB;
+                  case 'price_high':
+                    return priceB - priceA;
+                  case 'rating':
+                    return ratingB - ratingA;
+                  case 'stars':
+                    return starsB - starsA;
+                  default:
+                    return 0;
+                }
+              });
+
+              setFilteredHotels(list);
+              setHotels(list);
+              
+              return currentAllHotels;
+            });
+          
+            // Всегда оставляем возможность загрузить еще больше отелей
+            setHasMorePages(true);
+          }
+        } else {
+          setHasMorePages(false);
+        }
+      } catch (fetchErrorInner: any) {
+        clearTimeout(timeoutId);
+        if (fetchErrorInner.name === 'AbortError') {
+          throw new Error('Request timeout. Please try again.');
+        }
+        throw fetchErrorInner;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading more hotels:', error);
-      setError('Failed to load more hotels. Please try again.');
+      const errorMessage = error?.name === 'AbortError' 
+        ? 'Request timeout. Please try again.' 
+        : `Failed to load more hotels. Please try again. Error: ${error?.message || 'Unknown error'}`;
+      setError(errorMessage);
+      setHasMorePages(false);
     } finally {
       setLoadingMore(false);
     }
@@ -686,13 +808,13 @@ const HotelResults = () => {
             </svg>
           </button>
           <div className="header-info">
-            <h1 className="city-name">Hotels</h1>
+            <h1 className="city-name">{t('hotels')}</h1>
           </div>
         </div>
         <div className="error-message">
           <p>{error}</p>
           <button className="retry-btn" onClick={() => window.location.reload()}>
-            Try Again
+            {t('tryAgain')}
           </button>
         </div>
       </div>
@@ -723,14 +845,14 @@ const HotelResults = () => {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M3 7h6M3 12h12M3 17h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>
-          <span>Sort</span>
+          <span>{t('sort')}</span>
         </button>
         
         <button className="action-btn" onClick={() => setShowFiltersModal(true)}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M3 6h18M7 12h10M10 18h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>
-          <span>Filter</span>
+          <span>{t('filter')}</span>
         </button>
         
         {/* Map button removed to avoid extra UI and API usage */}
@@ -738,16 +860,16 @@ const HotelResults = () => {
 
       {/* Properties Count (use meta title if available in cache) */}
       <div className="properties-count">
-        {allHotels.length} properties
+        {allHotels.length} {t('properties')}
       </div>
 
       {/* Hotel Cards */}
       <div className="hotel-list">
         {hotels.length === 0 ? (
           <div className="no-results">
-            <p>No hotels found for your search criteria.</p>
+            <p>{t('noHotelsFound')}</p>
             <button className="retry-btn" onClick={() => navigate(-1)}>
-              Modify Search
+              {t('modifySearch')}
             </button>
           </div>
         ) : (
@@ -780,7 +902,7 @@ const HotelResults = () => {
                     <button 
                       className={`favorite-btn ${favorites.has(hotel.hotel_id.toString()) ? 'favorited' : ''}`}
                       onClick={(e) => toggleFavorite(hotel, e)}
-                      title={favorites.has(hotel.hotel_id.toString()) ? 'Remove from favorites' : 'Add to favorites'}
+                      title={favorites.has(hotel.hotel_id.toString()) ? t('removeFromFavorites') : t('addToFavorites')}
                     >
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
@@ -808,7 +930,7 @@ const HotelResults = () => {
                               <span className="rating-sep"> · </span>
                             )}
                             {hotel.property?.reviewCount && (
-                              <span className="rating-count">{hotel.property?.reviewCount?.toLocaleString()} reviews</span>
+                              <span className="rating-count">{hotel.property?.reviewCount?.toLocaleString()} {t('reviews')}</span>
                             )}
                           </div>
                         </div>
@@ -845,7 +967,7 @@ const HotelResults = () => {
                           {hotel.accessibilityLabel?.includes('shared') ? 'Room with shared bathroom' : 'Standard Room'}
                         </div>
                         <div className="room-beds">
-                          {parseInt(rooms) > 1 ? `${rooms} rooms` : '1 room'} · {hotel.roomType || 'Standard room'}
+                          {parseInt(rooms) > 1 ? `${rooms} ${t('rooms')}` : `1 ${t('room')}`} · {hotel.roomType || t('standardRoom')}
                         </div>
                       </div>
                       
@@ -855,50 +977,101 @@ const HotelResults = () => {
                           const nights = checkIn && checkOut ? 
                             Math.max(1, Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24))) : 1;
                           const roomsCount = parseInt(rooms) || 1;
-                          const total = typeof price === 'number' && !isNaN(price) ? Math.round(price) : null;
-                          const totalForRooms = total ? Math.round(total * roomsCount) : null;
-                          const perNight = total ? Math.round(total / nights) : null;
-                          const perNightForRooms = perNight ? Math.round(perNight * roomsCount) : null;
+                          // Проверяем, является ли цена общей (уже включает все комнаты) или за одну комнату
+                          const isTotalPrice = (hotel.priceBreakdown?.grossPrice as any)?.isTotal === true;
+                          const basePrice = typeof price === 'number' && !isNaN(price) ? price : null;
+                          // Если цена общая, используем как есть; если за одну комнату, умножаем на количество комнат
+                          const originalTotal = basePrice ? (isTotalPrice ? basePrice : basePrice * roomsCount) : null;
+                          
+                          // Apply promo discounts
+                          let promoDiscount = null;
+                          let totalForRooms = originalTotal;
+                          let perNightForRooms = null;
+                          
+                          if (originalTotal && nights > 0) {
+                            promoDiscount = calculatePromoDiscount({
+                              basePrice: originalTotal,
+                              nights,
+                              currency,
+                            });
+                            totalForRooms = promoDiscount.discountedPrice;
+                            const effectiveNights = nights - promoDiscount.freeNights;
+                            perNightForRooms = effectiveNights > 0 ? Number((totalForRooms / effectiveNights).toFixed(2)) : null;
+                          }
+
+                          const promoBadgeText = promoDiscount ? getPromoBadgeText(promoDiscount.appliedPromos) : '';
 
                           return (
                             <>
                               <div className="price-duration-info">
                                 {nights} night{nights > 1 ? 's' : ''}, {adults} adult{adults > '1' ? 's' : ''}
                                 {roomsCount > 1 && (
-                                  <span className="rooms-count"> · {roomsCount} rooms</span>
+                                  <span className="rooms-count"> · {roomsCount} {t('rooms')}</span>
                                 )}
                               </div>
-                              {strikePrice && totalForRooms && strikePrice > totalForRooms && (
-                                <div className="price-strike">{getCurrencySymbol(currency)} {Math.round(strikePrice * roomsCount)}</div>
+                              
+                              {/* Promo badge */}
+                              {promoBadgeText && (
+                                <div className="promo-badge">
+                                  <span className="promo-badge-text">{promoBadgeText}</span>
+                                </div>
                               )}
-                              <div className={totalForRooms ? "price-main" : "price-main no-price"}>
+                              
+                              {/* Original price (strikethrough) */}
+                              {promoDiscount && originalTotal && (
+                                <div className="price-strike promo-strike">
+                                  {getCurrencySymbol(currency)} {originalTotal.toFixed(2)}
+                                </div>
+                              )}
+                              
+                              {/* Discounted price */}
+                              <div className={totalForRooms ? "price-main promo-price" : "price-main no-price"}>
                                 {totalForRooms ? (
                                   <>
-                                    {getCurrencySymbol(currency)} {totalForRooms}
+                                    {getCurrencySymbol(currency)} {totalForRooms.toFixed(2)}
                                     {roomsCount > 1 && (
-                                      <span className="price-for-rooms"> for {roomsCount} rooms</span>
+                                      <span className="price-for-rooms"> {t('forRooms')} {roomsCount} {t('rooms')}</span>
                                     )}
                                   </>
                                 ) : (
-                                  <>See availability</>
+                                  <>{t('seeAvailability')}</>
                                 )}
                               </div>
+                              
+                              {/* Price per night */}
                               <div className="price-per-night">
                                 {perNightForRooms ? (
-                                  <>{getCurrencySymbol(currency)} {perNightForRooms} per night</>
+                                  <>
+                                    {getCurrencySymbol(currency)} {perNightForRooms.toFixed(2)} {t('perNight')}
+                                    {promoDiscount?.freeNights > 0 && (
+                                      <span className="promo-nights-info"> · {promoDiscount.freeNights} {t('nightsFree') || 'nights free'}</span>
+                                    )}
+                                  </>
                                 ) : '—'}
                                 {roomsCount > 1 && perNightForRooms && (
-                                  <span className="per-night-rooms"> for {roomsCount} rooms</span>
+                                  <span className="per-night-rooms"> {t('forRooms')} {roomsCount} {t('rooms')}</span>
                                 )}
                               </div>
-                              {hotel.priceBreakdown?.excludedPrice?.value && (
-                                <div className="price-per-night">
-                                  + {getCurrencySymbol(hotel.priceBreakdown?.excludedPrice?.currency || currency)} {Math.round((hotel.priceBreakdown?.excludedPrice?.value || 0) * roomsCount)} taxes and charges
+                              
+                              {/* Savings info - показываем 35% скидку и 2 ночи бесплатно отдельно */}
+                              {promoDiscount && promoDiscount.discountAmount > 0 && (
+                                <div className="promo-savings">
+                                  <div>{t('youSave') || 'You save'} {getCurrencySymbol(currency)} {promoDiscount.discountAmount.toFixed(2)}</div>
+                                  <div style={{ fontSize: '0.9em', marginTop: 2, opacity: 0.9 }}>
+                                    {promoDiscount.promoDiscountPercent || 45}% {t('discount') || 'discount'}
+                                    {promoDiscount.freeNights > 0 && ` + ${promoDiscount.freeNights} ${t('nightsFree') || 'nights free'}`}
+                                  </div>
                                 </div>
                               )}
-                              <div className="price-note">Includes taxes and fees</div>
+                              
+                              {hotel.priceBreakdown?.excludedPrice?.value && (
+                                <div className="price-per-night">
+                                  + {getCurrencySymbol(hotel.priceBreakdown?.excludedPrice?.currency || currency)} {Number(((hotel.priceBreakdown?.excludedPrice?.value || 0) * roomsCount).toFixed(2)).toFixed(2)} {t('taxesAndCharges')}
+                                </div>
+                              )}
+                              <div className="price-note">{t('includesTaxesAndFees')}</div>
                               {benefitBadges.some(b => b.text?.toLowerCase().includes('child')) && (
-                                <div className="badge-free-child">🍃 Free stay for your child</div>
+                                <div className="badge-free-child">🍃 {t('freeStayForChild')}</div>
                               )}
                             </>
                           );
@@ -922,7 +1095,7 @@ const HotelResults = () => {
                   onClick={loadMoreHotels}
                   disabled={loadingMore}
                 >
-                  {loadingMore ? 'Loading...' : 'Show more'}
+                  {loadingMore ? t('loading') : t('showMore')}
                 </button>
               </div>
             )}
@@ -935,21 +1108,21 @@ const HotelResults = () => {
         <div className="modal-overlay" onClick={() => setShowCurrencyModal(false)}>
           <div className="currency-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Filters</h3>
+              <h3>{t('filter')}</h3>
               <button className="close-btn" onClick={() => setShowFiltersModal(false)}>×</button>
             </div>
             <div className="currency-list">
               <div className="currency-item">
                 <div className="currency-info">
                   <div className="currency-text">
-                    <span className="currency-code">Price range</span>
-                    <span className="currency-name">Min / Max</span>
+                    <span className="currency-code">{t('priceRange')}</span>
+                    <span className="currency-name">{t('min')} / {t('max')}</span>
                   </div>
                 </div>
                 <div style={{ display:'flex', gap:8 }}>
-                  <input type="number" placeholder="Min" style={{ width:90 }}
+                  <input type="number" placeholder={t('min')} style={{ width:90 }}
                          onChange={(e)=> setFilters(f => ({...f, minPrice: e.target.value ? Number(e.target.value) : undefined}))} />
-                  <input type="number" placeholder="Max" style={{ width:90 }}
+                  <input type="number" placeholder={t('max')} style={{ width:90 }}
                          onChange={(e)=> setFilters(f => ({...f, maxPrice: e.target.value ? Number(e.target.value) : undefined}))} />
                 </div>
               </div>
@@ -957,7 +1130,7 @@ const HotelResults = () => {
               <div className="currency-item" onClick={()=> setFilters(f => ({...f, preferredOnly: !f.preferredOnly}))}>
                 <div className="currency-info">
                   <div className="currency-text">
-                    <span className="currency-code">Preferred only</span>
+                    <span className="currency-code">{t('preferredOnly')}</span>
                   </div>
                 </div>
                 {filters.preferredOnly && <span className="check-icon">✓</span>}
@@ -966,7 +1139,7 @@ const HotelResults = () => {
               <div className="currency-item" onClick={()=> setFilters(f => ({...f, mobileOnly: !f.mobileOnly}))}>
                 <div className="currency-info">
                   <div className="currency-text">
-                    <span className="currency-code">Mobile-only deals</span>
+                    <span className="currency-code">{t('mobileOnlyDeals')}</span>
                   </div>
                 </div>
                 {filters.mobileOnly && <span className="check-icon">✓</span>}
@@ -975,11 +1148,11 @@ const HotelResults = () => {
               <div className="currency-item">
                 <div className="currency-info">
                   <div className="currency-text">
-                    <span className="currency-code">Minimum rating</span>
+                    <span className="currency-code">{t('minimumRating')}</span>
                   </div>
                 </div>
                 <select defaultValue="" onChange={(e)=> setFilters(f => ({...f, minRating: e.target.value ? Number(e.target.value) : undefined}))}>
-                  <option value="">Any</option>
+                  <option value="">{t('any')}</option>
                   <option value="9">9+</option>
                   <option value="8">8+</option>
                   <option value="7">7+</option>
@@ -990,7 +1163,7 @@ const HotelResults = () => {
               <div className="currency-item">
                 <div className="currency-info">
                   <div className="currency-text">
-                    <span className="currency-code">Stars</span>
+                    <span className="currency-code">{t('stars')}</span>
                   </div>
                 </div>
                 <div style={{ display:'flex', gap:6 }}>
@@ -1010,16 +1183,16 @@ const HotelResults = () => {
         <div className="modal-overlay" onClick={() => setShowSortModal(false)}>
           <div className="sort-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Sort by</h3>
+              <h3>{t('sortBy')}</h3>
               <button className="close-btn" onClick={() => setShowSortModal(false)}>×</button>
             </div>
             <div className="sort-list">
               {[
-                { value: 'recommended', label: 'Our top picks' },
-                { value: 'price_low', label: 'Price (lowest first)' },
-                { value: 'price_high', label: 'Price (highest first)' },
-                { value: 'rating', label: 'Guest rating' },
-                { value: 'stars', label: 'Star rating' },
+                { value: 'recommended', label: t('ourTopPicks') },
+                { value: 'price_low', label: t('priceLowestFirst') },
+                { value: 'price_high', label: t('priceHighestFirst') },
+                { value: 'rating', label: t('guestRating') },
+                { value: 'stars', label: t('starRating') },
               ].map((option) => (
                 <div
                   key={option.value}

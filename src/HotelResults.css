@@ -573,6 +573,91 @@
   margin-bottom: 4px;
 }
 
+.promo-strike {
+  color: #999;
+  opacity: 0.7;
+}
+
+/* Promo Badge */
+.promo-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 8px;
+  animation: promoBadgePulse 0.6s ease backwards;
+}
+
+@keyframes promoBadgePulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.8) translateY(-4px);
+  }
+  50% {
+    transform: scale(1.05) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.promo-badge-text {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  animation: promoShine 2s ease-in-out infinite;
+}
+
+@keyframes promoShine {
+  0%, 100% {
+    box-shadow: 0 2px 8px rgba(255, 107, 53, 0.4);
+  }
+  50% {
+    box-shadow: 0 2px 12px rgba(255, 107, 53, 0.6), 0 0 20px rgba(255, 107, 53, 0.3);
+  }
+}
+
+.promo-price {
+  color: #00a884 !important;
+}
+
+.promo-savings {
+  font-size: 13px;
+  color: #00a884;
+  font-weight: 600;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(0, 168, 132, 0.1);
+  border-radius: 6px;
+  border: 1px solid rgba(0, 168, 132, 0.2);
+  animation: savingsFadeIn 0.5s ease backwards;
+  animation-delay: 0.2s;
+}
+
+@keyframes savingsFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.promo-nights-info {
+  color: #00a884;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
 .price-main {
   font-size: 24px;
   font-weight: 700;

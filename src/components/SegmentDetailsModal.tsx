@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '../hooks/useTranslation';
 import { formatAircraftType } from '../utils/aircraft';
 
 interface SegmentDetailsModalProps {
@@ -8,6 +9,7 @@ interface SegmentDetailsModalProps {
 }
 
 const SegmentDetailsModal: React.FC<SegmentDetailsModalProps> = ({ segment, title, onClose }) => {
+  const { t } = useTranslation();
   const legs: any[] = Array.isArray(segment?.legs) ? segment.legs : [];
 
   const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -21,7 +23,7 @@ const SegmentDetailsModal: React.FC<SegmentDetailsModalProps> = ({ segment, titl
     return t;
   })();
   const stopsCount = Math.max(0, legs.length - 1);
-  const stopsLabel = stopsCount === 0 ? 'Direct' : (stopsCount === 1 ? '1 stop' : `${stopsCount} stops`);
+  const stopsLabel = stopsCount === 0 ? t('directLabel') : (stopsCount === 1 ? t('oneStop') : `${stopsCount} ${t('stopsLabel')}`);
   const cabin = String(legs?.[0]?.cabinClass || 'Economy').replace('_',' ');
 
   return (
@@ -31,7 +33,7 @@ const SegmentDetailsModal: React.FC<SegmentDetailsModalProps> = ({ segment, titl
       <div style={{ width:'100%', maxWidth:640, background:'#1f1f1f', borderTopLeftRadius:16, borderTopRightRadius:16, border:'1px solid #333', padding:'12px 16px', maxHeight:'85vh', overflowY:'auto' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
           <div style={{ alignSelf:'center', width:36, height:4, borderRadius:2, background:'#666' }} />
-          <div style={{ color:'#fff', fontWeight:800, fontSize:20 }}>{title || 'Flight details'}</div>
+          <div style={{ color:'#fff', fontWeight:800, fontSize:20 }}>{title || t('flightDetailsLabel')}</div>
           <div style={{ color:'#bbb' }}>{stopsLabel} · {fmtDur(segMins)} · {cabin}</div>
         </div>
 
@@ -63,8 +65,8 @@ const SegmentDetailsModal: React.FC<SegmentDetailsModalProps> = ({ segment, titl
                   </div>
                   <div>
                     <div style={{ color:'#ddd', fontWeight:600 }}>{airline?.name || code || 'Airline'}</div>
-                    <div style={{ color:'#bbb' }}>Flight {code} {flightNumber} · {cabin}{plane?` · ${plane}`:''}</div>
-                    <div style={{ color:'#bbb' }}>Flight time {fmtDur(legMins)}</div>
+                    <div style={{ color:'#bbb' }}>{t('flightNumberLabel')} {code} {flightNumber} · {cabin}{plane?` · ${plane}`:''}</div>
+                    <div style={{ color:'#bbb' }}>{t('flightTimeLabel')} {fmtDur(legMins)}</div>
                   </div>
                 </div>
 
@@ -81,7 +83,7 @@ const SegmentDetailsModal: React.FC<SegmentDetailsModalProps> = ({ segment, titl
                     <div style={{ margin:'10px 0 0 0' }}>
                       <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'10px 12px', background:'#2a2a2a', border:'1px solid #3a3a3a', borderRadius:12, color:'#ddd' }}>
                         <svg width="16" height="16" fill="#ccc" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm.75 5h-1.5v6l5 3 .75-1.23-4.25-2.52V7z"/></svg>
-                        <span>Layover {lay} at {atCode}{atName?` · ${atName}`:''}</span>
+                        <span>{t('layoverLabel')} {lay} {t('atLabel')} {atCode}{atName?` · ${atName}`:''}</span>
                       </div>
                     </div>
                   );
@@ -102,7 +104,7 @@ const SegmentDetailsModal: React.FC<SegmentDetailsModalProps> = ({ segment, titl
 
         <div style={{ height:16 }} />
         <div style={{ display:'flex', justifyContent:'center', paddingBottom:8 }}>
-          <button className="ghost-link" onClick={onClose}>Close</button>
+          <button className="ghost-link" onClick={onClose}>{t('closeLabel')}</button>
         </div>
       </div>
     </div>

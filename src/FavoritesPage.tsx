@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './FavoritesPage.css';
+import { useTranslation } from './hooks/useTranslation';
 
 // Favorites storage utility
 const FAVORITES_KEY = 'hotel_favorites';
@@ -20,6 +21,7 @@ interface FavoriteHotel {
 
 const FavoritesPage: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [favorites, setFavorites] = useState<FavoriteHotel[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -95,27 +97,27 @@ const FavoritesPage: React.FC = () => {
       <div className="favorites-page">
         <div className="favorites-header">
           <div className="favorites-header-inner">
-            <h1>Favorites</h1>
+            <h1>{t('favorites')}</h1>
           </div>
         </div>
         <div className="loading-container">
           <div className="loading-spinner"></div>
-          <p>Loading favorites...</p>
+          <p>{t('loadingFavorites')}</p>
         </div>
         
         {/* Bottom Navigation */}
         <nav className="bottom-nav">
           <div className="bottom-nav-item" onClick={() => navigate('/')}>
             <SearchNavIcon />
-            <span className="bottom-nav-label">Search</span>
+            <span className="bottom-nav-label">{t('searchLabel')}</span>
           </div>
           <div className="bottom-nav-item" onClick={() => navigate('/bookings')}>
             <BookingsNavIcon />
-            <span className="bottom-nav-label">Bookings</span>
+            <span className="bottom-nav-label">{t('bookings')}</span>
           </div>
           <div className="bottom-nav-item active">
             <FavoritesNavIcon />
-            <span className="bottom-nav-label">Favorites</span>
+            <span className="bottom-nav-label">{t('favorites')}</span>
           </div>
           {(() => {
             try {
@@ -124,19 +126,19 @@ const FavoritesPage: React.FC = () => {
                   <svg className="bottom-nav-icon" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z"/>
                   </svg>
-                  <span className="bottom-nav-label">Profile</span>
+                  <span className="bottom-nav-label">{t('profileLabel')}</span>
                 </div>
               ) : (
                 <div className="bottom-nav-item" onClick={() => navigate('/auth?mode=signin')}>
                   <SignInNavIcon />
-                  <span className="bottom-nav-label">Sign in</span>
+                  <span className="bottom-nav-label">{t('signIn')}</span>
                 </div>
               );
             } catch {
               return (
                 <div className="bottom-nav-item" onClick={() => navigate('/auth?mode=signin')}>
                   <SignInNavIcon />
-                  <span className="bottom-nav-label">Sign in</span>
+                  <span className="bottom-nav-label">{t('signIn')}</span>
                 </div>
               );
             }
@@ -153,7 +155,7 @@ const FavoritesPage: React.FC = () => {
           <h1>Favorites</h1>
           {favorites.length > 0 && (
             <button className="clear-all-btn" onClick={clearAllFavorites}>
-              Clear all
+              {t('clearAll')}
             </button>
           )}
         </div>
@@ -175,10 +177,10 @@ const FavoritesPage: React.FC = () => {
               </div>
             </div>
           </div>
-          <h2 className="empty-title">No favorites yet</h2>
-          <p className="empty-subtitle">Start exploring and save hotels you love</p>
+          <h2 className="empty-title">{t('noFavoritesYet')}</h2>
+          <p className="empty-subtitle">{t('startExploringAndSaveHotels')}</p>
           <button className="explore-btn" onClick={() => navigate('/')}>
-            Explore hotels
+            {t('exploreHotels')}
           </button>
         </div>
       ) : (
@@ -246,15 +248,15 @@ const FavoritesPage: React.FC = () => {
       <nav className="bottom-nav">
         <div className="bottom-nav-item" onClick={() => navigate('/')}>
           <SearchNavIcon />
-          <span className="bottom-nav-label">Search</span>
+          <span className="bottom-nav-label">{t('searchLabel')}</span>
         </div>
         <div className="bottom-nav-item" onClick={() => navigate('/bookings')}>
           <BookingsNavIcon />
-          <span className="bottom-nav-label">Bookings</span>
+          <span className="bottom-nav-label">{t('bookings')}</span>
         </div>
         <div className="bottom-nav-item active">
           <FavoritesNavIcon />
-          <span className="bottom-nav-label">Favorites</span>
+          <span className="bottom-nav-label">{t('favorites')}</span>
         </div>
         {(() => {
           try {
@@ -263,19 +265,19 @@ const FavoritesPage: React.FC = () => {
                 <svg className="bottom-nav-icon" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z"/>
                 </svg>
-                <span className="bottom-nav-label">Profile</span>
+                <span className="bottom-nav-label">{t('profileLabel')}</span>
               </div>
             ) : (
               <div className="bottom-nav-item" onClick={() => navigate('/auth?mode=signin')}>
                 <SignInNavIcon />
-                <span className="bottom-nav-label">Sign in</span>
+                <span className="bottom-nav-label">{t('signIn')}</span>
               </div>
             );
           } catch {
             return (
               <div className="bottom-nav-item" onClick={() => navigate('/auth?mode=signin')}>
                 <SignInNavIcon />
-                <span className="bottom-nav-label">Sign in</span>
+                <span className="bottom-nav-label">{t('signIn')}</span>
               </div>
             );
           }

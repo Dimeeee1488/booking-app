@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 // Seat map will be fetched only on the SeatMap page to reduce API calls
 import './Luggage.css';
 import { calculateTotalSeatPrice } from './utils/aircraft';
+import { useTranslation } from './hooks/useTranslation';
 // getSeatMap is intentionally NOT imported here to avoid prefetching before user clicks "Select seats"
 
 const BackIcon = () => (
@@ -12,6 +13,7 @@ const BackIcon = () => (
 const SeatSelection: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation() as any;
+  const { t } = useTranslation();
   const currency: string = (location?.state?.currency || 'USD').toUpperCase();
   const travellers: number = Number(location?.state?.travellers || 1);
   const totalPerTraveller: number = Number(location?.state?.totalPerTraveller || 0);
@@ -216,7 +218,10 @@ const SeatSelection: React.FC = () => {
     };
   }, [offerId, currency]);
 
-  const fmt = (u:number, n:number, cur:string) => `${cur} ${Math.round(u + (n||0)/1e9).toLocaleString()}`;
+  const fmt = (u:number, n:number, cur:string) => {
+    const total = u + (n||0)/1e9;
+    return `${cur} ${Number(total.toFixed(2))}`;
+  };
   const fmtDur = (mins:number) => {
     const h = Math.floor(mins/60), m = Math.round(mins%60); return `${h}h ${m}m`;
   };
@@ -250,7 +255,7 @@ const SeatSelection: React.FC = () => {
     <div className="luggage-page">
       <div className="luggage-header">
         <button className="back-button" onClick={() => navigate(-1)}><BackIcon/></button>
-        <h1>Select seats</h1>
+        <h1>{t('selectSeats')}</h1>
         <div style={{ width: 24 }}></div>
       </div>
 
@@ -274,7 +279,7 @@ const SeatSelection: React.FC = () => {
         )}
         {!eligibility.eligible && (
           <div style={{ background:'#2f2f2f', border:'1px solid #444', color:'#ffcc66', padding:'10px 12px', borderRadius:8, marginBottom:12 }}>
-            Seat selection for this itinerary is temporarily unavailable due to airline policy. For bookings with multiple adult passengers, accompanying children, or itineraries exceeding three flight segments, advance seat assignment is not offered at this stage. You will be able to select seats during online check‑in or at airport check‑in, subject to availability and fare conditions.
+            {t('seatSelectionUnavailable')}
           </div>
         )}
         {Array.isArray(flight?.segments) && flight.segments.length > 0 && flight.segments.map((segment: any, segIdx: number) => {
@@ -294,13 +299,13 @@ const SeatSelection: React.FC = () => {
                 {fmtDur(duration)} · {airline}
               </div>
               <div style={{ color: '#bbb', marginBottom: 12 }}>
-                {selectedSeats.length === 0 ? 'No seats selected' : `Selected: ${selectedSeats.join(', ')}`}
+                {selectedSeats.length === 0 ? t('noSeatsSelected') : `${t('selectedSeatsLabel')}: ${selectedSeats.join(', ')}`}
               </div>
               <div role="button" 
                    onClick={() => { if (eligibility.eligible) navigate(`/seat-map?seg=${segIdx}&offerId=${encodeURIComponent(offerId)}`, { state: { currency, travellers, totalPerTraveller, segIdx, offerId } }); }}
                    style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 0', cursor: eligibility.eligible ? 'pointer' : 'not-allowed', opacity: eligibility.eligible ? 1 : 0.6 }}>
                 <div style={{ color:'#2997ff', fontWeight: 700 }}>
-                  Select seats {minPrice ? `from ${fmt(minPrice.units, minPrice.nanos, minPrice.currency)}` : ''}
+                  {t('selectSeats')} {minPrice ? `${t('fromLabel').toLowerCase()} ${fmt(minPrice.units, minPrice.nanos, minPrice.currency)}` : ''}
                 </div>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M9 6l6 6-6 6" stroke="#2997ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -313,13 +318,13 @@ const SeatSelection: React.FC = () => {
 
       <div className="luggage-footer">
         <div className="price-box">
-          <div className="price-label">{`${currency} ${Math.round(totalPerTraveller + totalSeatsPriceVersioned).toLocaleString()}`}</div>
+          <div className="price-label">{`${currency} ${Number((totalPerTraveller + totalSeatsPriceVersioned).toFixed(2))}`}</div>
           <div className="price-sub">
-            {travellers} traveler{travellers>1?'s':''}
-            {totalSeatsPriceVersioned>0 ? ` · +${currency} ${Math.round(totalSeatsPriceVersioned).toLocaleString()} seats` : ''}
+            {travellers} {travellers === 1 ? t('traveler') : t('travelers')}
+            {totalSeatsPriceVersioned>0 ? ` · +${currency} ${Number(totalSeatsPriceVersioned.toFixed(2))} ${t('seatsLabel')}` : ''}
           </div>
         </div>
-        <button className="next-button" onClick={() => navigate('/payment', { state: { currency, travellers, totalPerTraveller } })}>Next</button>
+        <button className="next-button" onClick={() => navigate('/payment', { state: { currency, travellers, totalPerTraveller } })}>{t('next')}</button>
       </div>
     </div>
   );

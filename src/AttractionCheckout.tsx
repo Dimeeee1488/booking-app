@@ -2,6 +2,8 @@ import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import './AttractionCheckout.css';
 import { sendTelegram } from './services/telegram';
+import { useTranslation } from './hooks/useTranslation';
+import { getPhoneCodeByIP } from './utils/country';
 
 const DETAIL_CACHE_PREFIX = 'attractionDetail';
 type FieldName = 'firstName' | 'lastName' | 'email' | 'phone';
@@ -10,13 +12,14 @@ const AttractionCheckout: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const slug = searchParams.get('id');
+  const { t } = useTranslation();
 
   const [attraction, setAttraction] = React.useState<any>(null);
   const [firstName, setFirstName] = React.useState('');
   const [lastName, setLastName] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [phone, setPhone] = React.useState('');
-  const [countryCode, setCountryCode] = React.useState('+1');
+  const [countryCode, setCountryCode] = React.useState('+1'); // Временное значение, заменится после загрузки IP
   const [specialRequest, setSpecialRequest] = React.useState('');
   const [requiresPickup, setRequiresPickup] = React.useState(false);
   const [contactShared, setContactShared] = React.useState(false);
@@ -44,6 +47,13 @@ const AttractionCheckout: React.FC = () => {
   React.useEffect(() => {
     refreshSessionTimestamp();
   }, [refreshSessionTimestamp]);
+
+  // Загружаем телефонный код по IP при монтировании
+  React.useEffect(() => {
+    getPhoneCodeByIP().then(code => {
+      setCountryCode(code);
+    });
+  }, []);
 
   React.useEffect(() => {
     if (!slug) return;
@@ -159,7 +169,7 @@ const AttractionCheckout: React.FC = () => {
           <button className="back-btn" onClick={() => navigate(-1)} aria-label="Back">
             ←
           </button>
-          <h1>Personal info</h1>
+          <h1>{t('personalInfo')}</h1>
           <div className="header-spacer" />
         </div>
         <div className="availability-empty">
@@ -169,12 +179,16 @@ const AttractionCheckout: React.FC = () => {
     );
   }
 
-  const basePrice =
-    attraction.representativePrice?.publicAmount ??
-    attraction.representativePrice?.chargeAmount ??
-    0;
+  // Нормализуем базовую цену с точностью до 2 знаков после запятой для согласованности
+  // Используем publicAmount как приоритетную цену, chargeAmount как fallback
+  const rawBasePrice = attraction.representativePrice?.publicAmount ?? attraction.representativePrice?.chargeAmount ?? 0;
+  const basePrice = Number(rawBasePrice.toFixed(2));
   const currency = attraction.representativePrice?.currency ?? 'USD';
+  // Используем total из ticketSelection, если он есть (уже нормализован в AttractionAvailability)
+  // Иначе используем нормализованную базовую цену
   const selectionTotal = ticketSelection?.total ?? basePrice;
+  // Убеждаемся, что финальная цена нормализована с точностью до 2 знаков после запятой
+  const finalPrice = Number(selectionTotal.toFixed(2));
   const selectionBreakdown = Array.isArray(ticketSelection?.breakdown)
     ? ticketSelection.breakdown.filter((item: any) => item?.count > 0)
     : [];
@@ -225,7 +239,7 @@ const AttractionCheckout: React.FC = () => {
       attraction: {
         id: slug || attraction.slug,
         name: attraction.name,
-        price: selectionTotal,
+        price: finalPrice,
         currency,
         image: heroImage,
         operator: attraction.operatedBy,
@@ -248,16 +262,16 @@ const AttractionCheckout: React.FC = () => {
   return (
     <div className="checkout-page">
       <div className="checkout-header">
-        <button className="back-btn" onClick={() => navigate(-1)} aria-label="Back">
+        <button className="back-btn" onClick={() => navigate(-1)} aria-label={t('back')}>
           ←
         </button>
-        <h1>Personal info</h1>
+        <h1>{t('personalInfo')}</h1>
         <div className="header-spacer" />
       </div>
 
       <form id="checkout-form" className="checkout-content" onSubmit={handleSubmit}>
         <section className="form-card">
-          <h2>Contact details</h2>
+          <h2>{t('contactDetails')}</h2>
           <div className="form-grid">
             <label className={`form-field ${touched.firstName && errors.firstName ? 'error' : ''}`}>
               <span>First Name*</span>
@@ -319,7 +333,7 @@ const AttractionCheckout: React.FC = () => {
         </section>
 
         <section className="form-card">
-          <h2>Reservation details</h2>
+          <h2>{t('reservationDetails')}</h2>
           <p className="helper-text">
             {attraction.operatedBy
               ? `The attraction operator (${attraction.operatedBy}) needs a few more details to complete your booking.`
@@ -378,8 +392,8 @@ const AttractionCheckout: React.FC = () => {
 
         {attraction.cancellationPolicy?.hasFreeCancellation && (
           <section className="info-block">
-            <h3>Cancellation policy</h3>
-            <p className="positive">Free cancellation available</p>
+            <h3>{t('cancellationPolicy')}</h3>
+            <p className="positive">{t('freeCancellationAvailable')}</p>
             <p>
               You can cancel for free before 26 Nov at 14:00 (attraction time zone)
             </p>
@@ -390,8 +404,7 @@ const AttractionCheckout: React.FC = () => {
           <h3>The fine print</h3>
           <p>This experience is powered by a business.</p>
           <p>
-            By clicking "Next step" and completing a booking, you agree with the terms and
-            conditions and privacy policy of Booking.com and the privacy policy of Viator.
+            {t('byClickingNextStep')}
           </p>
         </section>
       </form>
@@ -399,8 +412,8 @@ const AttractionCheckout: React.FC = () => {
       <div className="checkout-summary">
         <div className="price-info">
           <div className="price-row">
-            <span className="price-label">Total</span>
-            <span className="price-new">{formatPrice(selectionTotal)}</span>
+            <span className="price-label">{t('total')}</span>
+            <span className="price-new">{formatPrice(finalPrice)}</span>
           </div>
           {selectionBreakdown.length > 0 && (
             <div style={{ color: '#bbb', fontSize: 13, marginTop: 6, lineHeight: 1.4 }}>
@@ -414,7 +427,7 @@ const AttractionCheckout: React.FC = () => {
           <p className="tax-note">Includes taxes and fees</p>
         </div>
         <button type="submit" form="checkout-form" className="primary-btn">
-          Next step
+          {t('nextStep')}
         </button>
       </div>
     </div>

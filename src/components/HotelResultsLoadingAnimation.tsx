@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import './HotelResultsLoadingAnimation.css';
+import { useTranslation } from '../hooks/useTranslation';
 
 const HotelResultsLoadingAnimation: React.FC = () => {
+  const { t } = useTranslation();
   const [progress, setProgress] = useState(0);
-  const [loadingText, setLoadingText] = useState('Searching for hotels...');
+  const [loadingText, setLoadingText] = useState(t('searchingForHotels'));
 
   useEffect(() => {
     // Smooth progress animation
@@ -15,10 +17,10 @@ const HotelResultsLoadingAnimation: React.FC = () => {
     }, 300);
 
     // Change loading text
-    const textTimer1 = setTimeout(() => setLoadingText('Checking availability...'), 1000);
-    const textTimer2 = setTimeout(() => setLoadingText('Comparing prices...'), 2000);
-    const textTimer3 = setTimeout(() => setLoadingText('Finding best deals...'), 3000);
-    const textTimer4 = setTimeout(() => setLoadingText('Loading results...'), 4000);
+    const textTimer1 = setTimeout(() => setLoadingText(t('checkingAvailability')), 1000);
+    const textTimer2 = setTimeout(() => setLoadingText(t('comparingPrices')), 2000);
+    const textTimer3 = setTimeout(() => setLoadingText(t('findingBestDeals')), 3000);
+    const textTimer4 = setTimeout(() => setLoadingText(t('loadingResults')), 4000);
 
     return () => {
       clearInterval(progressInterval);
@@ -27,7 +29,7 @@ const HotelResultsLoadingAnimation: React.FC = () => {
       clearTimeout(textTimer3);
       clearTimeout(textTimer4);
     };
-  }, []);
+  }, [t]);
 
   return (
     <div className="hotel-results-loading">

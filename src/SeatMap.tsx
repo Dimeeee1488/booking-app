@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getSeatMap } from './services/flightApi';
+import { useTranslation } from './hooks/useTranslation';
 import './Luggage.css';
 import { formatAircraftType, calculateTotalSeatPrice } from './utils/aircraft';
 
@@ -8,12 +9,12 @@ const BackIcon = () => (
   <svg width="24" height="24" fill="white" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
 );
 
-const Seat: React.FC<{ selected: boolean; available: boolean; blocked?: boolean; price?: {units:number;nanos:number;currency:string}|null; onClick: () => void }>=({ selected, available, blocked, price, onClick })=>{
+const Seat: React.FC<{ selected: boolean; available: boolean; blocked?: boolean; price?: {units:number;nanos:number;currency:string}|null; onClick: () => void; t: (key: string) => string }>=({ selected, available, blocked, price, onClick, t })=>{
   const bg = blocked ? '#2c2c2c' : (!available ? '#3b3b3b' : (selected ? '#1db954' : '#4da3ff'));
-  const title = blocked ? 'Not assignable' : (price ? `${price.currency} ${Math.round(price.units + (price.nanos||0)/1e9)}` : (available ? 'Free' : 'Unavailable'));
+  const title = blocked ? t('notAssignable') : (price ? `${price.currency} ${Number((price.units + (price.nanos||0)/1e9).toFixed(2))}` : (available ? t('free') : t('unavailable')));
   return (
     <div onClick={() => onClick()} style={{ width: 'min(9.5vw, 30px)', height: 'min(9.5vw, 30px)', borderRadius: 8, background: bg, cursor: available && !blocked ? 'pointer':'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, color: blocked ? '#888' : '#000' }} title={title}>
-      {blocked ? '×' : (price && Math.round(price.units + (price.nanos||0)/1e9) > 0 ? '$' : '')}
+      {blocked ? '×' : (price && Number((price.units + (price.nanos||0)/1e9).toFixed(2)) > 0 ? '$' : '')}
     </div>
   );
 };
@@ -21,6 +22,7 @@ const Seat: React.FC<{ selected: boolean; available: boolean; blocked?: boolean;
 const SeatMap: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation() as any;
+  const { t } = useTranslation();
   const currency: string = (location?.state?.currency || 'USD').toUpperCase();
   const travellers: number = Number(location?.state?.travellers || 1);
   const totalPerTraveller: number = Number(location?.state?.totalPerTraveller || 0);
@@ -524,7 +526,7 @@ const SeatMap: React.FC = () => {
       // Сохраняем цену ровно как показано в UI
       try {
         const p = grid.seats[id]?.price;
-        const shown = p ? Math.round((p.units || 0) + (p.nanos || 0) / 1e9) : 0;
+        const shown = p ? Number(((p.units || 0) + (p.nanos || 0) / 1e9).toFixed(2)) : 0;
         persistSeatPrice(id, shown);
         if (removed) persistSeatPrice(removed, null);
         syncSeatPricesWithSelection(next);
@@ -535,11 +537,11 @@ const SeatMap: React.FC = () => {
     });
   };
 
-  const fmt = (n: number) => `${currency} ${Math.round(n).toLocaleString()}`;
+  const fmt = (n: number) => `${currency} ${Number(n.toFixed(2))}`;
   const fmtPriceObj = (p?: {units:number;nanos:number;currency:string}|null) => {
     if (!p) return 'Free';
-    const val = Math.round(p.units + (p.nanos||0)/1e9);
-    return `${p.currency} ${val.toLocaleString()}`;
+    const val = Number((p.units + (p.nanos||0)/1e9).toFixed(2));
+    return `${p.currency} ${val}`;
   };
 
   // Используем централизованную функцию для расчета общей суммы за все сегменты
@@ -614,7 +616,7 @@ const SeatMap: React.FC = () => {
     <div className="luggage-page">
       <div className="luggage-header">
         <button className="back-button" onClick={() => navigate(-1)}><BackIcon/></button>
-        <h1>Select seats</h1>
+        <h1>{t('selectSeats')}</h1>
         <div style={{ width: 24 }}></div>
       </div>
       {aircraftLabel && (
@@ -627,33 +629,33 @@ const SeatMap: React.FC = () => {
       )}
 
       {loading ? (
-        <div style={{ padding: 16 }}>Loading seat map...</div>
+        <div style={{ padding: 16 }}>{t('loadingSeatMap')}</div>
       ) : error ? (
         <div style={{ padding: 16, color: '#ff7676' }}>
           {error}
           <div style={{ marginTop: 12 }}>
-            <button onClick={() => { setError(''); setLoading(true); setTimeout(()=>{ window.location.reload(); }, 50); }} style={{ background:'#0071c2', color:'#fff', border:'none', borderRadius:8, padding:'10px 16px', fontWeight:600 }}>Retry</button>
+            <button onClick={() => { setError(''); setLoading(true); setTimeout(()=>{ window.location.reload(); }, 50); }} style={{ background:'#0071c2', color:'#fff', border:'none', borderRadius:8, padding:'10px 16px', fontWeight:600 }}>{t('retry')}</button>
           </div>
         </div>
       ) : apiBacked ? (
         <div style={{ padding: 16 }}>
           <div style={{ marginBottom: 8, color: '#ccc' }}>
-            Select seats for flight {segIdx + 1}
+            {t('selectSeatsForFlight')} {segIdx + 1}
           </div>
           {(!hasSelectable || !eligibility.eligible) && (
             <div style={{ background:'#2f2f2f', border:'1px solid #444', color:'#ffcc66', padding:'10px 12px', borderRadius:8, marginBottom:12 }}>
-              Seat selection for this itinerary is temporarily unavailable due to airline policy. For bookings with multiple adult passengers, accompanying children, or itineraries exceeding three flight segments, advance seat assignment is not offered at this stage. You will be able to select seats during online check‑in or at airport check‑in, subject to availability and fare conditions.
+              {t('seatSelectionUnavailable')}
             </div>
           )}
           
           {/* Legend */}
           <div style={{ display:'flex', gap:8, alignItems:'center', color:'#bbb', fontSize:12, marginBottom: 10 }}>
             <div style={{ width:14, height:14, borderRadius:3, background:'#4da3ff' }}></div>
-            <span>Available</span>
+            <span>{t('available')}</span>
             <div style={{ width:14, height:14, borderRadius:3, background:'#3b3b3b', marginLeft:8 }}></div>
-            <span>Unavailable</span>
+            <span>{t('unavailable')}</span>
             <div style={{ width:14, height:14, borderRadius:3, background:'#2c2c2c', display:'flex', alignItems:'center', justifyContent:'center', color:'#888', fontSize:10, marginLeft:8 }}>×</div>
-            <span>Not assignable</span>
+            <span>{t('notAssignable')}</span>
           </div>
 
           <div style={{ overflowX: 'auto', border: '1px solid #333', borderRadius: 12, padding: 12 }}>
@@ -709,7 +711,8 @@ const SeatMap: React.FC = () => {
                       }}>
                         <Seat 
                           available={eligibility.eligible && seat.available} 
-                          blocked={seat.info?.description==='BLOCKED'} 
+                          blocked={seat.info?.description==='BLOCKED'}
+                          t={t} 
                           price={seat.price} 
                           selected={isSelected} 
                           onClick={() => { if (eligibility.eligible) setPreviewId(id); }} 
@@ -780,11 +783,11 @@ const SeatMap: React.FC = () => {
       <div className="luggage-footer">
         <div className="price-box">
           <div className="price-label">{fmt(totalPerTraveller + selectedSeatsTotal)}</div>
-          <div className="price-sub">{travellers} traveler{travellers>1?'s':''} · Seats {selected.length} {selectedSeatsTotal>0?`· +${currency} ${Math.round(selectedSeatsTotal).toLocaleString()}`:''}</div>
+          <div className="price-sub">{travellers} {travellers === 1 ? t('traveler') : t('travelers')} · {t('seatsLabel')} {selected.length} {selectedSeatsTotal>0?`· +${currency} ${Number(selectedSeatsTotal.toFixed(2))}`:''}</div>
         </div>
         <div style={{ display:'flex', gap:8 }}>
-          <button className="next-button" style={{ background:'#444' }} onClick={() => { setSelected([]); try { if (offerId) { localStorage.setItem(`seat_selection_${offerId}`, JSON.stringify([])); localStorage.setItem(`seat_selection_price_${offerId}`, JSON.stringify({})); } } catch {} }}>Clear selection</button>
-        <button className="next-button" onClick={() => navigate(-1)}>Next</button>
+          <button className="next-button" style={{ background:'#444' }} onClick={() => { setSelected([]); try { if (offerId) { localStorage.setItem(`seat_selection_${offerId}`, JSON.stringify([])); localStorage.setItem(`seat_selection_price_${offerId}`, JSON.stringify({})); } } catch {} }}>{t('clearSelection')}</button>
+        <button className="next-button" onClick={() => navigate(-1)}>{t('next')}</button>
         </div>
       </div>
       {/* dev debug overlay removed to avoid blocking clicks */}

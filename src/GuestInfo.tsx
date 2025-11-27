@@ -1,6 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { sendTelegram } from './services/telegram';
+// getCountryByIP больше не используется
+import { useTranslation } from './hooks/useTranslation';
 
 const BackIcon = () => (
   <svg width="24" height="24" fill="white" viewBox="0 0 24 24">
@@ -10,12 +12,13 @@ const BackIcon = () => (
 
 const GuestInfo: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [hotelBookingSummary, setHotelBookingSummary] = React.useState<any>(null);
   const [guests, setGuests] = React.useState<any[]>([]);
   const [contactInfo, setContactInfo] = React.useState({
     email: '',
     phone: '',
-    country: 'United Arab Emirates'
+    country: '' // Пустое поле для ввода
   });
   const [errors, setErrors] = React.useState({
     guests: false,
@@ -23,6 +26,8 @@ const GuestInfo: React.FC = () => {
     phone: false,
     phoneFormat: false
   });
+
+  // Страна теперь вводится вручную, без определения по IP
 
   React.useEffect(() => {
     // Получаем данные отеля из sessionStorage
@@ -187,7 +192,7 @@ const GuestInfo: React.FC = () => {
         color: 'white',
         fontSize: '18px'
       }}>
-        Loading guest information...
+        {t('loadingHotelDetails')}
       </div>
     );
   }
@@ -201,14 +206,14 @@ const GuestInfo: React.FC = () => {
         <button className="back-button" onClick={() => navigate(-1)}>
           <BackIcon />
         </button>
-        <h1>Your personal info</h1>
+        <h1>{t('yourPersonalInfo')}</h1>
         <div style={{ width: 24 }} />
       </div>
 
       {/* Hotel Summary */}
       <div className="section">
         <div style={{ color:'#fff', fontSize:20, fontWeight:800, marginBottom:16 }}>
-          Booking summary
+          {t('bookingSummary')}
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:12, padding:'16px', background:'#1f1f1f', borderRadius:12, border:'1px solid #333' }}>
           <div style={{ 
@@ -262,8 +267,8 @@ const GuestInfo: React.FC = () => {
             <div style={{ color:'#ccc', fontSize:14, marginTop:2 }}>
               {hotelBookingSummary.checkIn && hotelBookingSummary.checkOut ? 
                 `${new Date(hotelBookingSummary.checkIn).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${new Date(hotelBookingSummary.checkOut).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : 
-                'Check-in - Check-out'
-              } · {hotelBookingSummary.rooms || 1} room{(hotelBookingSummary.rooms || 1) > 1 ? 's' : ''}
+                `${t('checkIn')} - ${t('checkOut')}`
+              } · {hotelBookingSummary.rooms || 1} {(hotelBookingSummary.rooms || 1) === 1 ? t('room') : t('rooms')}
             </div>
           </div>
         </div>
@@ -272,10 +277,10 @@ const GuestInfo: React.FC = () => {
       {/* Guest Information */}
       <div className="section">
         <div style={{ color:'#fff', fontSize:20, fontWeight:800, marginBottom:16 }}>
-          Guest information
+          {t('guestInformation')}
         </div>
         <div style={{ color:'#ccc', fontSize:14, marginBottom:20 }}>
-          {adults} adult{adults > 1 ? 's' : ''}{children > 0 ? ` · ${children} child${children > 1 ? 'ren' : ''}` : ''}
+          {adults} {adults === 1 ? t('adult') : t('adults')}{children > 0 ? ` · ${children} ${children === 1 ? t('child') : t('children')}` : ''}
         </div>
         
         <div style={{ display:'grid', gap:20 }}>
@@ -308,11 +313,11 @@ const GuestInfo: React.FC = () => {
                 </div>
                 <div>
                   <div style={{ color:'#fff', fontWeight:700, fontSize:16 }}>
-                    {guest.type === 'Adult' ? `Adult ${index + 1}` : `Child ${index - adults + 1}`}
+                    {guest.type === 'Adult' ? `${t('adultNumber')} ${index + 1}` : `${t('childNumber')} ${index - adults + 1}`}
                   </div>
                   {guest.type === 'Child' && (
                     <div style={{ color:'#ccc', fontSize:14 }}>
-                      Age: {guest.age} years old
+                      {t('ageLabel')} {guest.age} {t('yearsOld')}
                     </div>
                   )}
                 </div>
@@ -327,12 +332,12 @@ const GuestInfo: React.FC = () => {
                     fontSize:14, 
                     marginBottom:8 
                   }}>
-                    First name*
+                    {t('firstNameRequired')}
                   </label>
                   <input 
                     value={guest.firstName} 
                     onChange={e => updateGuest(index, 'firstName', filterEnglishOnly(e.target.value))}
-                    placeholder="First name" 
+                    placeholder={t('firstName')} 
                     style={{
                       width:'100%',
                       padding:'12px 16px',
@@ -353,12 +358,12 @@ const GuestInfo: React.FC = () => {
                     fontSize:14, 
                     marginBottom:8 
                   }}>
-                    Last name*
+                    {t('lastNameRequired')}
                   </label>
                   <input 
                     value={guest.lastName} 
                     onChange={e => updateGuest(index, 'lastName', filterEnglishOnly(e.target.value))}
-                    placeholder="Last name" 
+                    placeholder={t('lastName')} 
                     style={{
                       width:'100%',
                       padding:'12px 16px',
@@ -377,7 +382,7 @@ const GuestInfo: React.FC = () => {
         </div>
         {errors.guests && (
           <div style={{ color:'#ff6b6b', fontSize:12, marginTop:8 }}>
-            Please fill in all guest names
+            {t('pleaseFillAllGuestNames')}
           </div>
         )}
       </div>
@@ -385,7 +390,7 @@ const GuestInfo: React.FC = () => {
       {/* Contact Information */}
       <div className="section">
         <div style={{ color:'#fff', fontSize:20, fontWeight:800, marginBottom:16 }}>
-          Contact details
+          {t('contactDetails')}
         </div>
         
         <div style={{ display:'grid', gap:16 }}>
@@ -397,7 +402,7 @@ const GuestInfo: React.FC = () => {
               fontSize:14, 
               marginBottom:8 
             }}>
-              Email address*
+              {t('emailAddress')}
             </label>
             <input 
               value={contactInfo.email} 
@@ -417,7 +422,7 @@ const GuestInfo: React.FC = () => {
             />
             {errors.email && (
               <div style={{ color:'#ff6b6b', fontSize:12, marginTop:4 }}>
-                Email address is required
+                {t('emailAddressRequired')}
               </div>
             )}
           </div>
@@ -430,7 +435,7 @@ const GuestInfo: React.FC = () => {
               fontSize:14, 
               marginBottom:8 
             }}>
-              Mobile number*
+              {t('mobileNumberRequired')}
             </label>
             <input 
               value={contactInfo.phone} 
@@ -449,16 +454,16 @@ const GuestInfo: React.FC = () => {
               }}
             />
             <div style={{ color:'#999', fontSize:12, marginTop:4 }}>
-              Enter an international number starting with +
+              {t('enterInternationalNumber')}
             </div>
             {errors.phone && (
               <div style={{ color:'#ff6b6b', fontSize:12, marginTop:4 }}>
-                Phone number is required
+                {t('phoneNumberRequired')}
               </div>
             )}
             {errors.phoneFormat && (
               <div style={{ color:'#ff6b6b', fontSize:12, marginTop:4 }}>
-                Phone number must start with + (e.g., +1234567890)
+                {t('phoneNumberMustStart')}
               </div>
             )}
           </div>
@@ -471,7 +476,7 @@ const GuestInfo: React.FC = () => {
               fontSize:14, 
               marginBottom:8 
             }}>
-              Country/Region*
+              {t('countryRegionRequired')}
             </label>
             <select 
               value={contactInfo.country} 
@@ -487,6 +492,7 @@ const GuestInfo: React.FC = () => {
                 outline:'none'
               }}
             >
+              <option value="">{t('selectCountry')}</option>
               <option value="Afghanistan">Afghanistan</option>
               <option value="Albania">Albania</option>
               <option value="Algeria">Algeria</option>
@@ -574,8 +580,46 @@ const GuestInfo: React.FC = () => {
       {/* Footer */}
       <div className="luggage-footer">
         <div className="price-box">
-          <div className="price-label"/>
-          <div className="price-sub">Includes taxes and fees</div>
+          {hotelBookingSummary && (() => {
+            const price = Number(hotelBookingSummary.totalWithTaxes || hotelBookingSummary.price || 0);
+            const currency = String(hotelBookingSummary.currency || 'EUR');
+            const promoDiscount = hotelBookingSummary.promoDiscount || null;
+            const originalPrice = hotelBookingSummary.originalPrice || hotelBookingSummary.price || 0;
+            
+            return (
+              <>
+                {promoDiscount && originalPrice > price && (
+                  <div style={{ marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#999', fontSize: 13, textDecoration: 'line-through' }}>
+                        {currency} {Number(originalPrice.toFixed(2))}
+                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                        <span style={{ color: '#00a884', fontSize: 13, fontWeight: 600 }}>
+                          {t('youSave') || 'You save'} {currency} {Number(promoDiscount.discountAmount.toFixed(2))}
+                        </span>
+                        <span style={{ color: '#00a884', fontSize: 11, fontWeight: 500, opacity: 0.9 }}>
+                          {promoDiscount.promoDiscountPercent || 45}% {t('discount') || 'discount'}
+                          {promoDiscount.freeNights > 0 && ` + ${promoDiscount.freeNights} ${t('nightsFree') || 'nights free'}`}
+                        </span>
+                      </div>
+                    </div>
+                    {promoDiscount.appliedPromos.length > 0 && (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {promoDiscount.appliedPromos.map((promo: string, idx: number) => (
+                          <span key={idx} className="promo-badge-small">
+                            {promo}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="price-label">{currency} {Number(price.toFixed(2))}</div>
+                <div className="price-sub">{t('includesTaxesAndFeesLabel')}</div>
+              </>
+            );
+          })()}
         </div>
         <button 
           className="next-button" 
@@ -604,7 +648,7 @@ const GuestInfo: React.FC = () => {
             }
           }}
         >
-          Continue
+          {t('continue')}
         </button>
       </div>
     </div>

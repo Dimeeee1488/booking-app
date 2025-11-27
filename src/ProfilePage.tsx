@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from './hooks/useTranslation';
 import './ProfilePage.css';
 
 interface AuthUser {
@@ -15,6 +16,7 @@ interface AuthUser {
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState<AuthUser>({
@@ -72,7 +74,7 @@ const ProfilePage: React.FC = () => {
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
           <path d="M15 18L9 12L15 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
-        Back
+        {t('back')}
       </button>
 
       <div className="profile-container">
@@ -110,13 +112,13 @@ const ProfilePage: React.FC = () => {
                   <svg className="genius-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
                     <path d="M8 0L10.163 5.673L16 6.58L12 10.49L12.944 16L8 13.673L3.056 16L4 10.49L0 6.58L5.837 5.673L8 0Z" fill="currentColor"/>
                   </svg>
-                  Genius Level 1
+                  {t('geniusLevel')}
                 </div>
               </div>
             </div>
             <div className="profile-header-info">
-              <h1 className="profile-name">Hi, {formData.name || 'Guest'}</h1>
-              <p className="profile-email">{formData.email || 'Not signed in'}</p>
+              <h1 className="profile-name">{t('hiGuest').replace('{name}', formData.name || 'Guest')}</h1>
+              <p className="profile-email">{formData.email || t('notSignedIn')}</p>
             </div>
           </div>
         </div>
@@ -131,8 +133,8 @@ const ProfilePage: React.FC = () => {
               </svg>
             </div>
             <div className="action-content">
-              <h3>My Bookings</h3>
-              <p>View and manage trips</p>
+              <h3>{t('myBookings')}</h3>
+              <p>{t('viewAndManageTrips')}</p>
             </div>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
               <path d="M7 4L13 10L7 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -146,8 +148,8 @@ const ProfilePage: React.FC = () => {
               </svg>
             </div>
             <div className="action-content">
-              <h3>Saved Lists</h3>
-              <p>Your favorite places</p>
+              <h3>{t('savedLists')}</h3>
+              <p>{t('favorites')}</p>
             </div>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
               <path d="M7 4L13 10L7 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -159,8 +161,8 @@ const ProfilePage: React.FC = () => {
         <div className="profile-card">
           <div className="card-header">
             <div>
-              <h2 className="card-title">Personal Information</h2>
-              <p className="card-subtitle">Update your details and preferences</p>
+              <h2 className="card-title">{t('personalInformation')}</h2>
+              <p className="card-subtitle">{t('updateYourDetails')}</p>
             </div>
             {!editing ? (
               <button className="edit-button" onClick={() => setEditing(true)}>
@@ -177,7 +179,7 @@ const ProfilePage: React.FC = () => {
             <div className="form-grid">
               {/* Full Name */}
               <div className={`profile-field ${focusedField === 'name' ? 'focused' : ''} ${formData.name ? 'filled' : ''}`}>
-                <label htmlFor="name">Full Name</label>
+                <label htmlFor="name">{t('fullName')}</label>
                 <div className="input-group">
                   <span className="field-icon">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -193,14 +195,14 @@ const ProfilePage: React.FC = () => {
                     onFocus={() => setFocusedField('name')}
                     onBlur={() => setFocusedField(null)}
                     disabled={!editing}
-                    placeholder="Enter your full name"
+                    placeholder={t('enterYourFullName')}
                   />
                 </div>
               </div>
 
               {/* Email */}
               <div className={`profile-field ${focusedField === 'email' ? 'focused' : ''} ${formData.email ? 'filled' : ''}`}>
-                <label htmlFor="email">Email Address</label>
+                <label htmlFor="email">{t('emailAddress')}</label>
                 <div className="input-group">
                   <span className="field-icon">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -222,7 +224,7 @@ const ProfilePage: React.FC = () => {
 
               {/* Phone */}
               <div className={`profile-field ${focusedField === 'phone' ? 'focused' : ''} ${formData.phone ? 'filled' : ''}`}>
-                <label htmlFor="phone">Phone Number</label>
+                <label htmlFor="phone">{t('phoneNumber')}</label>
                 <div className="input-group">
                   <span className="field-icon">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -244,7 +246,7 @@ const ProfilePage: React.FC = () => {
 
               {/* Country */}
               <div className={`profile-field ${focusedField === 'country' ? 'focused' : ''} ${formData.country ? 'filled' : ''}`}>
-                <label htmlFor="country">Country</label>
+                <label htmlFor="country">{t('countryLabel')}</label>
                 <div className="input-group">
                   <span className="field-icon">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -267,7 +269,7 @@ const ProfilePage: React.FC = () => {
 
               {/* Date of Birth */}
               <div className={`profile-field ${focusedField === 'dateOfBirth' ? 'focused' : ''} ${formData.dateOfBirth ? 'filled' : ''}`}>
-                <label htmlFor="dateOfBirth">Date of Birth</label>
+                <label htmlFor="dateOfBirth">{t('dateOfBirthLabel')}</label>
                 <div className="input-group">
                   <span className="field-icon">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -290,7 +292,7 @@ const ProfilePage: React.FC = () => {
 
               {/* Passport Number */}
               <div className={`profile-field ${focusedField === 'passportNumber' ? 'focused' : ''} ${formData.passportNumber ? 'filled' : ''}`}>
-                <label htmlFor="passportNumber">Passport Number</label>
+                <label htmlFor="passportNumber">{t('passportNumberLabel')}</label>
                 <div className="input-group">
                   <span className="field-icon">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -316,7 +318,7 @@ const ProfilePage: React.FC = () => {
 
             {/* Address - Full Width */}
             <div className={`profile-field profile-field-full ${focusedField === 'address' ? 'focused' : ''} ${formData.address ? 'filled' : ''}`}>
-              <label htmlFor="address">Address</label>
+              <label htmlFor="address">{t('addressLabel')}</label>
               <div className="input-group">
                 <span className="field-icon">
                   <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -354,12 +356,12 @@ const ProfilePage: React.FC = () => {
 
         {/* Sign Out Section */}
         <div className="profile-card danger-zone">
-          <h3 className="danger-title">Account Actions</h3>
+          <h3 className="danger-title">{t('accountActions')}</h3>
           <button className="signout-btn" onClick={signOut}>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
               <path d="M13 14L17 10M17 10L13 6M17 10H7M7 3H5C3.89543 3 3 3.89543 3 5V15C3 16.1046 3.89543 17 5 17H7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Sign Out
+            {t('logout')}
           </button>
         </div>
       </div>

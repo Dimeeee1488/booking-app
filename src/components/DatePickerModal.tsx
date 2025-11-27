@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '../hooks/useTranslation';
 import './DatePickerModal.css';
 
 interface DatePickerModalProps {
@@ -16,12 +17,7 @@ interface DateRange {
   end: Date | null;
 }
 
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
-
-const DAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+// Months and days will be translated using t() function
 
 const DatePickerModal: React.FC<DatePickerModalProps> = ({
   isOpen,
@@ -32,6 +28,7 @@ const DatePickerModal: React.FC<DatePickerModalProps> = ({
   flightType,
   fieldType = 'departure'
 }) => {
+  const { t } = useTranslation();
   // Начальные месяцы для показа (текущий и следующий)
   // Генерируем все месяцы от текущего до сентября 2026
   const generateMonths = () => {
@@ -235,10 +232,10 @@ const DatePickerModal: React.FC<DatePickerModalProps> = ({
     return (
       <div key={`${actualYear}-${actualMonth}`} className="month-container">
         <h3 className="month-title">
-          {MONTHS[actualMonth]} {actualYear}
+          {t(`month${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][actualMonth]}` as any)} {actualYear}
         </h3>
         <div className="days-grid">
-          {DAYS.map(day => (
+          {[t('dayMonday'), t('dayTuesday'), t('dayWednesday'), t('dayThursday'), t('dayFriday'), t('daySaturday'), t('daySunday')].map(day => (
             <div key={day} className="day-header">{day}</div>
           ))}
           {Array.from({ length: firstDay }, (_, i) => (
@@ -302,7 +299,7 @@ const DatePickerModal: React.FC<DatePickerModalProps> = ({
               <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
             </svg>
           </button>
-          <h2 className="date-picker-title">When?</h2>
+          <h2 className="date-picker-title">{t('whenLabel')}</h2>
         </div>
 
         {/* Календарь */}
@@ -317,7 +314,7 @@ const DatePickerModal: React.FC<DatePickerModalProps> = ({
             onClick={() => handleDateFieldClick('start')}
           >
             <svg className="calendar-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 2h2v2h6V2h2v2h3v18H4V4h3V2zm12 6H5v12h14V8zM7 10h2v2H7v-2zm4 0h2v2h-2v-2zm4 0h2v2h-2v-2zM7 14h2v2H7v-2zm4 0h2v2h-2v-2z"/></svg>
-            <span>{formatDateForDisplay(departDate) || 'Select departure date'}</span>
+            <span>{formatDateForDisplay(departDate) || t('selectDepartureDate')}</span>
           </div>
           
           {flightType === 'round-trip' && (
@@ -326,14 +323,14 @@ const DatePickerModal: React.FC<DatePickerModalProps> = ({
               onClick={() => handleDateFieldClick('end')}
             >
               <svg className="calendar-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 2h2v2h6V2h2v2h3v18H4V4h3V2zm12 6H5v12h14V8zM7 10h2v2H7v-2zm4 0h2v2h-2v-2zm4 0h2v2h-2v-2zM7 14h2v2H7v-2zm4 0h2v2h-2v-2z"/></svg>
-              <span>{formatDateForDisplay(returnDate) || 'Select return date'}</span>
+              <span>{formatDateForDisplay(returnDate) || t('selectReturnDate')}</span>
             </div>
           )}
         </div>
 
         {/* Кнопка Done */}
         <button className="done-button" onClick={handleDone} disabled={doneDisabled}>
-          Done
+          {t('doneButton')}
         </button>
       </div>
     </div>

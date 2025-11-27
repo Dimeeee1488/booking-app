@@ -28,7 +28,7 @@ git add .
 git commit -m "Initial commit: ready for deploy"
 
 # Подключи к GitHub (ЗАМЕНИ ТВОЙ_ЮЗЕРНЕЙМ на свой!)
-git remote add origin https://github.com/ТВОЙ_ЮЗЕРНЕЙМ/booking-app.git
+git remote add origin https://github.com/Dimeeee1488/booking-app.git
 
 # Переименуй ветку в main
 git branch -M main
@@ -174,4 +174,5 @@ git push
 
 - **DEPLOY_STEP_BY_STEP.md** - детальная инструкция
 - **README_DEPLOY.md** - краткая версия
+
 

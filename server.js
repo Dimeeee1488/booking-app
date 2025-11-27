@@ -280,6 +280,61 @@ app.get('/api/flights/searchFlightsMultiStops', async (req, res) => {
   }
 });
 
+// Получение детальной информации по конкретному авиабилету по токену
+app.get('/api/flights/getFlightDetails', async (req, res) => {
+  try {
+    const { token, currency_code } = req.query;
+
+    if (!token) {
+      return res.status(400).json({ error: 'token parameter is required' });
+    }
+
+    // Убеждаемся, что токен - это строка
+    const tokenStr = String(token);
+    
+    const params = new URLSearchParams();
+    params.append('token', tokenStr);
+
+    if (currency_code) {
+      params.append('currency_code', String(currency_code));
+    }
+
+    const apiUrl = `https://${RAPIDAPI_HOST}/api/v1/flights/getFlightDetails?${params.toString()}`;
+    console.log('Server: Fetching flight details, token length:', tokenStr.length);
+
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'x-rapidapi-host': RAPIDAPI_HOST,
+        'x-rapidapi-key': RAPIDAPI_KEY,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      console.error('Flight details API error:', response.status, errorText.substring(0, 200));
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    // Проверяем Content-Type перед парсингом JSON
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const text = await response.text();
+      console.error('Flight details: Non-JSON response:', text.substring(0, 200));
+      throw new Error('Server returned non-JSON response');
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Flight details error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 app.get('/api/flights/getSeatMap', async (req, res) => {
   try {
     const { offerToken, currency_code } = req.query;
@@ -308,6 +363,32 @@ app.get('/api/flights/getSeatMap', async (req, res) => {
     res.json(data);
   } catch (error) {
     console.error('Seat map error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Meta endpoints
+app.get('/api/meta/languages', async (_req, res) => {
+  try {
+    const response = await fetch(
+      `https://${RAPIDAPI_HOST}/api/v1/meta/getLanguages`,
+      {
+        method: 'GET',
+        headers: {
+          'x-rapidapi-host': RAPIDAPI_HOST,
+          'x-rapidapi-key': RAPIDAPI_KEY,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Language list error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

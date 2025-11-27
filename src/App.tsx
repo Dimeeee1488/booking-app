@@ -2,7 +2,7 @@ import React from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import FlightResultsMulti from './FlightResultsMulti';
 import FlightResults from './FlightResults';
-import { searchAirports, detectCurrencyByIP } from './services/flightApi';
+import { searchAirports } from './services/flightApi';
 import { searchHotelDestinationsCached } from './services/hotelApi';
 import FlightDetail from './FlightDetail';
 import TicketType from './TicketType';
@@ -11,6 +11,8 @@ import SeatSelection from './SeatSelection';
 import Luggage from './Luggage';
 import DatePickerModal from './components/DatePickerModal';
 import GuestsRoomsModal from './components/GuestsRoomsModal';
+import WelcomePromoNotification from './components/WelcomePromoNotification';
+import HomePromoBanner from './components/HomePromoBanner';
 import Payment from './Payment';
 import BookingOverview from './BookingOverview';
 import GuestInfo from './GuestInfo';
@@ -30,6 +32,10 @@ import AttractionDetail from './AttractionDetail';
 import AttractionAvailability from './AttractionAvailability';
 import AttractionCheckout from './AttractionCheckout';
 import './App.css';
+import { getLanguages, type MetaLanguage } from './services/metaApi';
+import { getPreferredLanguage, setPreferredLanguage, subscribeToPreferredLanguage, type PreferredLanguage } from './utils/language';
+import { translate, type TranslationKey } from './localization';
+import { useTranslation } from './hooks/useTranslation';
 
 // Session utility functions
 const initSession = () => {
@@ -324,9 +330,118 @@ const GeniusLogo = () => (
 
 const HomePage = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = React.useState('stays');
   const navigationType = 'forward'; // По умолчанию
-  
+  const [languageMenuOpen, setLanguageMenuOpen] = React.useState(false);
+  const [languageSearch, setLanguageSearch] = React.useState('');
+  const [languageList, setLanguageList] = React.useState<MetaLanguage[]>([]);
+  const [languageLoading, setLanguageLoading] = React.useState(false);
+  const [languageError, setLanguageError] = React.useState(false);
+  const [selectedLanguage, setSelectedLanguage] = React.useState<PreferredLanguage>(() => getPreferredLanguage());
+  const languageMenuRef = React.useRef<HTMLDivElement>(null);
+  const translateCurrent = React.useCallback(
+    (key: TranslationKey) => translate(selectedLanguage.code, key),
+    [selectedLanguage.code]
+  );
+  const selectLanguage = React.useCallback((language: MetaLanguage) => {
+    const payload: PreferredLanguage = {
+      code: language.code,
+      name: language.name,
+      countryFlag: language.countryFlag,
+    };
+    setSelectedLanguage(payload);
+    setPreferredLanguage(payload);
+    setLanguageMenuOpen(false);
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLanguageLoading(true);
+    getLanguages()
+      .then((data) => {
+        if (cancelled) return;
+        setLanguageList(data);
+        setLanguageError(!data.length);
+      })
+      .catch((error) => {
+        console.error('Failed to load languages', error);
+        if (!cancelled) {
+          setLanguageError(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLanguageLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const unsubscribe = subscribeToPreferredLanguage((language) => {
+      setSelectedLanguage(language);
+    });
+    return unsubscribe;
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = selectedLanguage.code;
+    }
+  }, [selectedLanguage.code]);
+
+  React.useEffect(() => {
+    if (!languageMenuOpen) return;
+    const handlePointer = (event: MouseEvent) => {
+      if (languageMenuRef.current && !languageMenuRef.current.contains(event.target as Node)) {
+        setLanguageMenuOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setLanguageMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointer);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handlePointer);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [languageMenuOpen]);
+
+  React.useEffect(() => {
+    if (!languageMenuOpen) {
+      setLanguageSearch('');
+    }
+  }, [languageMenuOpen]);
+
+  React.useEffect(() => {
+    if (!languageList.length) return;
+    const exists = languageList.some((language) => language.code === selectedLanguage.code);
+    if (!exists) {
+      selectLanguage(languageList[0]);
+    }
+  }, [languageList, selectedLanguage.code, selectLanguage]);
+
+  const filteredLanguages = React.useMemo(() => {
+    if (!languageSearch.trim()) return languageList;
+    const normalized = languageSearch.trim().toLowerCase();
+    return languageList.filter(
+      (language) =>
+        language.name.toLowerCase().includes(normalized) ||
+        language.code.toLowerCase().includes(normalized)
+    );
+  }, [languageList, languageSearch]);
+
+  const selectedLanguageEmoji = React.useMemo(() => {
+    const match = languageList.find((language) => language.code === selectedLanguage.code);
+    return match?.flagEmoji || '🌐';
+  }, [languageList, selectedLanguage.code]);
+
   // Состояния для Attractions
   const [attractionLocation, setAttractionLocation] = React.useState('');
   const [attractionSuggestions, setAttractionSuggestions] = React.useState<any[]>([]);
@@ -441,22 +556,6 @@ const HomePage = () => {
     };
   }, []);
 
-  // Auto-detect currency on first visit using IP-based geolocation
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const already = sessionStorage.getItem('currency_autoset');
-        if (already === '1') return;
-        const res = await detectCurrencyByIP();
-        const cc = (res?.currency || '').toUpperCase();
-        if (cc && currency !== cc) {
-          setCurrency(cc);
-        }
-        sessionStorage.setItem('currency_autoset','1');
-      } catch {}
-    })();
-  }, []);
-
   // Функции форматирования дат
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '';
@@ -523,12 +622,12 @@ const HomePage = () => {
   };
 
   // Stays guests summary formatter
-  const formatStaysGuestsSummary = () => {
-    const roomsText = `${staysRooms} room${staysRooms > 1 ? 's' : ''}`;
-    const adultsText = `${staysAdults} adult${staysAdults > 1 ? 's' : ''}`;
-    const childrenText = staysChildren > 0 ? `${staysChildren} child${staysChildren > 1 ? 'ren' : ''}` : 'No children';
+  const formatStaysGuestsSummary = React.useCallback(() => {
+    const roomsText = `${staysRooms} ${staysRooms > 1 ? t('rooms') : t('room')}`;
+    const adultsText = `${staysAdults} ${staysAdults === 1 ? t('adultNumber').toLowerCase() : t('adults').toLowerCase()}`;
+    const childrenText = staysChildren > 0 ? `${staysChildren} ${staysChildren === 1 ? t('childNumber').toLowerCase() : t('children').toLowerCase()}` : t('noChildren');
     return `${roomsText} · ${adultsText} · ${childrenText}`;
-  };
+  }, [staysRooms, staysAdults, staysChildren, t]);
 
   // Handle guests/rooms modal apply
   const handleStaysGuestsApply = (rooms: number, adults: number, children: number, childrenAges: number[], currency: string) => {
@@ -558,10 +657,16 @@ const HomePage = () => {
   ]), []);
 
   const travellersSummary = React.useMemo(() => {
-    const ch = childrenCount > 0 ? `, ${childrenCount} child${childrenCount>1?'ren':''}` : '';
-    const stopsLabel = stops === '0' ? ' · Non-stop' : (stops === '1' ? ' · Up to 1 stop' : '');
-    return `${adults} adult${adults>1?'s':''}${ch} · ${cabinClass.replace('_',' ')} · ${currency}${stopsLabel}`;
-  }, [adults, childrenCount, cabinClass, currency, stops]);
+    const cabinLabel = ({
+      ECONOMY: t('cabinClassEconomy'),
+      PREMIUM_ECONOMY: t('cabinClassPremiumEconomy'),
+      BUSINESS: t('cabinClassBusiness'),
+      FIRST: t('cabinClassFirst')
+    } as Record<string, string>)[cabinClass] || t('cabinClassEconomy');
+    const ch = childrenCount > 0 ? ` · ${childrenCount} ${t('children').toLowerCase()}` : '';
+    const adultsText = adults === 1 ? t('adultNumber').toLowerCase() : t('adults').toLowerCase();
+    return `${adults} ${adultsText}${ch} · ${cabinLabel} · ${currency}`;
+  }, [adults, childrenCount, cabinClass, currency, t]);
 
   React.useEffect(() => {
     if (!showTravellersModal) return;
@@ -674,6 +779,40 @@ const HomePage = () => {
 
   const [searchError, setSearchError] = React.useState<string>('');
   const [attractionSearchError, setAttractionSearchError] = React.useState<string>('');
+  const attractionSpotlights = React.useMemo(() => ([
+    {
+      title: translateCurrent('skipTheLineMuseums'),
+      subtitle: translateCurrent('louvreVaticanBritishMuseum'),
+      stat: `1.8k ${translateCurrent('curatedTours')}`,
+      badge: translateCurrent('cultureLabel'),
+      image: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=900&h=600&fit=crop',
+      gradient: 'rgba(82,67,170,0.75)'
+    },
+    {
+      title: translateCurrent('themeParkThrills'),
+      subtitle: translateCurrent('dubaiOrlandoOsaka'),
+      stat: `900+ ${translateCurrent('dayPasses')}`,
+      badge: translateCurrent('familyLabel'),
+      image: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=900&h=600&fit=crop',
+      gradient: 'rgba(14,116,144,0.75)'
+    },
+    {
+      title: translateCurrent('nightFoodSafaris'),
+      subtitle: translateCurrent('bangkokSeoulSingapore'),
+      stat: `640 ${translateCurrent('streetExperiences')}`,
+      badge: translateCurrent('foodieLabel'),
+      image: 'https://images.unsplash.com/photo-1466978913421-dad2ebd01d17?w=900&h=600&fit=crop',
+      gradient: 'rgba(194,65,12,0.75)'
+    },
+    {
+      title: translateCurrent('natureEscapes'),
+      subtitle: translateCurrent('baliRiceFieldsSwissAlps'),
+      stat: `720 ${translateCurrent('outdoorAdventures')}`,
+      badge: translateCurrent('outdoorsLabel'),
+      image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=900&h=600&fit=crop',
+      gradient: 'rgba(34,197,94,0.7)'
+    }
+  ]), [translateCurrent]);
 
   const handleSearch = async () => {
     try {
@@ -911,6 +1050,66 @@ const HomePage = () => {
       {/* Header */}
       <header className="header">
         <h1>Booking.com</h1>
+        <div
+          className={`language-selector ${languageMenuOpen ? 'open' : ''}`}
+          ref={languageMenuRef}
+        >
+          <button
+            className="language-selector-trigger"
+            onClick={() => setLanguageMenuOpen((open) => !open)}
+            aria-haspopup="listbox"
+            aria-expanded={languageMenuOpen}
+            type="button"
+            title={selectedLanguage.name}
+          >
+            <span className="language-flag">{selectedLanguageEmoji}</span>
+          </button>
+          {languageMenuOpen && (
+            <div className="language-dropdown">
+              <div className="language-search">
+                <input
+                  type="text"
+                  value={languageSearch}
+                  onChange={(event) => setLanguageSearch(event.target.value)}
+                  placeholder={translateCurrent('searchLanguageOrCode')}
+                />
+              </div>
+              {languageError && !languageLoading && (
+                <div className="language-error">{languageError}</div>
+              )}
+              <div className="language-scroll">
+                {languageLoading && !filteredLanguages.length ? (
+                  <div className="language-empty">{translateCurrent('loadingLanguages')}</div>
+                ) : filteredLanguages.length > 0 ? (
+                  filteredLanguages.map((language) => (
+                    <button
+                      key={language.code}
+                      className={`language-option ${
+                        language.code === selectedLanguage.code ? 'active' : ''
+                      }`}
+                      onClick={() => selectLanguage(language)}
+                      type="button"
+                      title={language.name}
+                    >
+                      <span className="language-option-flag">{language.flagEmoji}</span>
+                      <div className="language-option-copy">
+                        <span className="language-option-name">{language.name}</span>
+                        <span className="language-option-code">
+                          {language.code.toUpperCase()}
+                        </span>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="language-empty">No languages found</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        {!languageLoading && languageError && (
+          <div className="language-inline-error">{languageError}</div>
+        )}
       </header>
 
       {/* (card moved below Trending header) */}
@@ -941,7 +1140,7 @@ const HomePage = () => {
           }}
         >
           <BedIcon />
-          Stays
+          {translateCurrent('navStays')}
         </button>
         <button 
           className={`nav-tab ${activeTab === 'flights' ? 'active' : ''}`}
@@ -954,14 +1153,14 @@ const HomePage = () => {
           }}
         >
           <FlightIcon />
-          Flights
+          {translateCurrent('navFlights')}
         </button>
         <button 
           className={`nav-tab ${activeTab === 'attractions' ? 'active' : ''}`}
           onClick={() => setActiveTab('attractions')}
         >
           <AttractionsIcon />
-          Attractions
+          {translateCurrent('navAttractions')}
         </button>
       </div>
 
@@ -1036,7 +1235,7 @@ const HomePage = () => {
                         }
                       }, 500);
                     }}
-                    placeholder="Where are you going?"
+                    placeholder={translateCurrent('searchDestinationPlaceholder')}
                     style={{
                       background: 'transparent',
                       border: 'none',
@@ -1064,7 +1263,7 @@ const HomePage = () => {
                 <div className="hotel-suggestions" onMouseDown={(e) => e.preventDefault()}>
                 {isSearchingHotels ? (
                   <div style={{ padding: '12px 16px', color: '#aaa', textAlign: 'center' }}>
-                    Searching...
+                    {translateCurrent('searching')}
                   </div>
                 ) : hotelSearchError ? (
                   <div style={{ padding: '12px 16px', color: '#ff6b6b', textAlign: 'center', fontSize: '13px' }}>
@@ -1126,7 +1325,7 @@ const HomePage = () => {
                 <div style={{ color: 'white', fontSize: '16px', cursor: 'pointer' }}>
                   {staysCheckIn 
                     ? formatStaysDateRange(staysCheckIn, staysCheckOut)
-                    : 'Check-in - Check-out'}
+                    : translateCurrent('searchDatesPlaceholder')}
                 </div>
               </div>
             </div>
@@ -1183,13 +1382,18 @@ const HomePage = () => {
               
               console.log('Navigating to:', `/hotel-results?${params.toString()}`);
               navigate(`/hotel-results?${params.toString()}`);
-            }}>Search</button>
+            }}>{translateCurrent('searchButton')}</button>
           </div>
         )}
 
 
 
 
+
+      {/* Promo Banner for Stays - перед фото с городами */}
+      {activeTab === 'stays' && (
+        <HomePromoBanner activeTab="stays" />
+      )}
 
       {/* Continue your search - Hotels - Show immediately after search form */}
       {activeTab === 'stays' && (() => {
@@ -1256,8 +1460,8 @@ const HomePage = () => {
         return (
           <div className="continue-search-section">
             <div className="continue-search-container">
-              <h2 className="continue-search-title">Popular destinations</h2>
-              <p className="continue-search-subtitle">Discover amazing destinations</p>
+              <h2 className="continue-search-title">{translateCurrent('popularDestinations')}</h2>
+              <p className="continue-search-subtitle">{translateCurrent('discoverAmazingDestinations')}</p>
               
               <div className="hotel-destinations-grid">
                 {destinations.map((destination: any, index: number) => (
@@ -1314,8 +1518,8 @@ const HomePage = () => {
             <div style={{ padding: '20px' }}>
               <div ref={paxRef} className="travellers-row">
                 <div className="travellers-label">
-                  <div>Adults</div>
-                  <div className="travellers-sublabel">Ages 12+</div>
+                  <div>{t('adults')}</div>
+                  <div className="travellers-sublabel">{t('ages12Plus')}</div>
                 </div>
                 <div className="counter">
                   <button className="stepper" onClick={()=>setAdults(Math.max(1, adults-1))}>−</button>
@@ -1326,8 +1530,8 @@ const HomePage = () => {
               
               <div className="travellers-row">
                 <div className="travellers-label">
-                  <div>Children</div>
-                  <div className="travellers-sublabel">Ages 2–11</div>
+                  <div>{t('children')}</div>
+                  <div className="travellers-sublabel">{t('ages2to11')}</div>
                 </div>
                 <div className="counter">
                   <button className="stepper" onClick={()=>setChildrenCount(Math.max(0, childrenCount-1))}>−</button>
@@ -1337,11 +1541,11 @@ const HomePage = () => {
               </div>
               {childrenCount > 0 && (
                 <div style={{ marginTop: '12px' }}>
-                  <div style={{ color: '#ccc', fontSize: '14px', marginBottom: '8px' }}>Children ages</div>
+                  <div style={{ color: '#ccc', fontSize: '14px', marginBottom: '8px' }}>{t('childrenAges')}</div>
                   <div style={{ display: 'grid', gap: '8px' }}>
                     {Array.from({ length: childrenCount }, (_, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ color: '#ccc', fontSize: '14px', minWidth: '60px' }}>Child {i + 1}</span>
+                        <span style={{ color: '#ccc', fontSize: '14px', minWidth: '60px' }}>{t('childNumber')} {i + 1}</span>
                         <select 
                           value={childrenAges[i] || 2} 
                           onChange={(e) => {
@@ -1359,7 +1563,7 @@ const HomePage = () => {
                           }}
                         >
                           {Array.from({ length: 10 }, (_, age) => (
-                            <option key={age + 2} value={age + 2}>{age + 2} years old</option>
+                            <option key={age + 2} value={age + 2}>{age + 2} {t('yearsOld')}</option>
                           ))}
                         </select>
                       </div>
@@ -1370,14 +1574,14 @@ const HomePage = () => {
 
               <div ref={currencyRef} style={{ marginTop: '20px' }}>
                 <button onClick={()=> setOpenCurrency(v=>!v)} style={{ width:'100%', textAlign:'left', padding:'12px 14px', background:'#2a2a2a', border:'1px solid #444', borderRadius:8, color:'#fff' }}>
-                  Currency {openCurrency ? '▲' : '▼'}
+                  {t('currencyLabel')} {openCurrency ? '▲' : '▼'}
                 </button>
                 {openCurrency && (
                   <div style={{ marginTop:10 }}>
                     <input
                       value={currencyFilter}
                       onChange={(e)=> setCurrencyFilter(e.target.value)}
-                      placeholder="Search currency (e.g., USD, EUR)"
+                      placeholder={t('searchCurrency')}
                       style={{ width:'100%', padding:'10px 12px', border:'1px solid #555', borderRadius:8, background:'transparent', color:'#fff' }}
                     />
                     <div style={{ marginTop:12, display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8 }}>
@@ -1394,15 +1598,15 @@ const HomePage = () => {
 
               <div style={{ marginTop:'20px' }}>
                 <button onClick={()=> setOpenClass(v=>!v)} style={{ width:'100%', textAlign:'left', padding:'12px 14px', background:'#2a2a2a', border:'1px solid #444', borderRadius:8, color:'#fff' }}>
-                  Class {openClass ? '▲' : '▼'}
+                  {t('classLabel')} {openClass ? '▲' : '▼'}
                 </button>
                 {openClass && (
                   <div className="radio-list" style={{ marginTop:10 }}>
                     {[
-                      { value: 'ECONOMY', label: 'Economy' },
-                      { value: 'PREMIUM_ECONOMY', label: 'Premium Economy' },
-                      { value: 'BUSINESS', label: 'Business' },
-                      { value: 'FIRST', label: 'First' }
+                      { value: 'ECONOMY', label: t('cabinClassEconomy') },
+                      { value: 'PREMIUM_ECONOMY', label: t('cabinClassPremiumEconomy') },
+                      { value: 'BUSINESS', label: t('cabinClassBusiness') },
+                      { value: 'FIRST', label: t('cabinClassFirst') }
                     ].map(option => (
                       <label key={option.value} className="radio-item">
                         <span style={{ color: 'white' }}>{option.label}</span>
@@ -1418,14 +1622,14 @@ const HomePage = () => {
 
               <div ref={stopsRef} style={{ marginTop:'20px' }}>
                 <button onClick={()=> setOpenStops(v=>!v)} style={{ width:'100%', textAlign:'left', padding:'12px 14px', background:'#2a2a2a', border:'1px solid #444', borderRadius:8, color:'#fff' }}>
-                  Stops {openStops ? '▲' : '▼'}
+                  {t('stopsLabel')} {openStops ? '▲' : '▼'}
                 </button>
                 {openStops && (
                   <div className="radio-list" style={{ marginTop:10 }}>
                     {[
-                      { value: '0', label: 'Non-stop' },
-                      { value: '1', label: 'Up to 1 stop' },
-                      { value: '2', label: 'Up to 2 stops' }
+                      { value: '0', label: t('nonStop') },
+                      { value: '1', label: t('upTo1Stop') },
+                      { value: '2', label: t('upTo2Stops') }
                     ].map(option => (
                       <label key={option.value} className="radio-item">
                         <span style={{ color: 'white' }}>{option.label}</span>
@@ -1441,7 +1645,7 @@ const HomePage = () => {
             </div>
 
             <div className="modal-actions">
-              <button className="done-button" onClick={()=> setShowTravellersModal(false)}>Done</button>
+              <button className="done-button" onClick={()=> setShowTravellersModal(false)}>{t('doneButton')}</button>
             </div>
           </div>
         </div>
@@ -1451,13 +1655,14 @@ const HomePage = () => {
 
         {/* Attractions Form */}
         {activeTab === 'attractions' && (
+          <React.Fragment>
           <div className="search-card">
             <div className="search-field">
               <SearchIcon />
               <div className="search-field-content">
                 <input
                   type="text"
-                  placeholder="Where are you going?"
+                  placeholder={translateCurrent('searchDestinationPlaceholder')}
                   value={attractionLocation}
                   onChange={(e) => {
                     const v = e.target.value;
@@ -1583,7 +1788,7 @@ const HomePage = () => {
                 <div className="search-field-label">
                   {attractionDate ? 
                     (attractionDate.includes(' to ') ? attractionDate : attractionDate) 
-                    : 'Any dates'}
+                    : translateCurrent('whenLabel')}
                 </div>
               </div>
             </div>
@@ -1618,8 +1823,51 @@ const HomePage = () => {
               console.log('Search params:', searchParams.toString());
               console.log('Navigating to:', `/attractions-results?${searchParams.toString()}`);
               navigate(`/attractions-results?${searchParams.toString()}`);
-            }}>Search</button>
+            }}>{translateCurrent('searchButton')}</button>
           </div>
+
+          {/* Promo Banner for Attractions - перед Experiences hand-picked for you */}
+          <HomePromoBanner activeTab="attractions" />
+
+          <div className="attractions-showcase">
+            <div className="attractions-showcase-header">
+              <div>
+                <h3>{translateCurrent('experiencesHandPicked')}</h3>
+                <p>{translateCurrent('bookIconicTours')}</p>
+              </div>
+              <div className="attractions-showcase-pill">
+                {translateCurrent('trendingThisWeek')}
+              </div>
+            </div>
+            <div className="attractions-spotlight-grid">
+              {attractionSpotlights.map((item, idx) => (
+                <div 
+                  key={idx}
+                  className="attraction-spotlight-card"
+                  style={{ backgroundImage: `linear-gradient(135deg, ${item.gradient}, rgba(0,0,0,0.85)), url(${item.image})` }}
+                >
+                  <div className="spotlight-badge">{item.badge}</div>
+                  <h4>{item.title}</h4>
+                  <p>{item.subtitle}</p>
+                  <div className="spotlight-meta">
+                    <span>{item.stat}</span>
+                    <button
+                      onClick={() => {
+                        setActiveTab('attractions');
+                        setAttractionLocation(item.title);
+                        setSelectedAttractionName(item.title);
+                        setSelectedAttractionId('');
+                        setAttractionSearchError('');
+                      }}
+                    >
+                      {translateCurrent('exploreLabel')}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          </React.Fragment>
         )}
 
         {/* Flights Form */}
@@ -1689,7 +1937,7 @@ const HomePage = () => {
                       }
                     }, 400);
                   }}
-                  placeholder="Where from?"
+                  placeholder={translateCurrent('whereFrom')}
                   style={{
                     background: 'transparent',
                     border: 'none',
@@ -1790,7 +2038,7 @@ const HomePage = () => {
                       }
                     }, 400);
                   }}
-                  placeholder="Where to?"
+                  placeholder={translateCurrent('whereTo')}
                   style={{
                     background: 'transparent',
                     border: 'none',
@@ -1841,7 +2089,7 @@ const HomePage = () => {
                     ? (flightType === 'round-trip' 
                         ? formatDateRange(departDate, returnDate) 
                         : formatDate(departDate))
-                    : 'When?'}
+                    : translateCurrent('whenLabel')}
                 </div>
               </div>
             </div>
@@ -1872,7 +2120,7 @@ const HomePage = () => {
                           } catch { setMultiSuggest([]); }
                         }, 200);
                       }}
-                      placeholder="Where from?"
+                      placeholder={translateCurrent('whereFrom')}
                       style={{
                         background: 'transparent',
                         border: 'none',
@@ -1923,7 +2171,7 @@ const HomePage = () => {
                           } catch { setMultiSuggest([]); }
                         }, 200);
                       }}
-                      placeholder="Where to?"
+                      placeholder={translateCurrent('whereTo')}
                       style={{
                         background: 'transparent',
                         border: 'none',
@@ -1962,7 +2210,7 @@ const HomePage = () => {
                   <CalendarIcon />
                   <div className="search-field-content">
                     <div style={{ color: 'white', fontSize: '16px', cursor: 'pointer' }}>
-                      {multiLegs[0]?.date ? formatDate(multiLegs[0].date) : 'When?'}
+                      {multiLegs[0]?.date ? formatDate(multiLegs[0].date) : translateCurrent('whenLabel')}
                     </div>
                   </div>
                 </div>
@@ -1991,7 +2239,7 @@ const HomePage = () => {
                           } catch { setMultiSuggest([]); }
                         }, 200);
                       }}
-                      placeholder="Where from?"
+                      placeholder={translateCurrent('whereFrom')}
                       style={{
                         background: 'transparent',
                         border: 'none',
@@ -2042,7 +2290,7 @@ const HomePage = () => {
                           } catch { setMultiSuggest([]); }
                         }, 200);
                       }}
-                      placeholder="Where to?"
+                      placeholder={translateCurrent('whereTo')}
                       style={{
                         background: 'transparent',
                         border: 'none',
@@ -2081,7 +2329,7 @@ const HomePage = () => {
                   <CalendarIcon />
                   <div className="search-field-content">
                     <div style={{ color: 'white', fontSize: '16px', cursor: 'pointer' }}>
-                      {multiLegs[1]?.date ? formatDate(multiLegs[1].date) : 'When?'}
+                      {multiLegs[1]?.date ? formatDate(multiLegs[1].date) : translateCurrent('whenLabel')}
                     </div>
                   </div>
                 </div>
@@ -2123,7 +2371,7 @@ const HomePage = () => {
                             } catch { setMultiSuggest([]); }
                           }, 200);
                         }}
-                        placeholder="Where from?"
+                        placeholder={translateCurrent('whereFrom')}
                         style={{
                           background: 'transparent',
                           border: 'none',
@@ -2174,7 +2422,7 @@ const HomePage = () => {
                             } catch { setMultiSuggest([]); }
                           }, 200);
                         }}
-                        placeholder="Where to?"
+                        placeholder={translateCurrent('whereTo')}
                         style={{
                           background: 'transparent',
                           border: 'none',
@@ -2213,7 +2461,7 @@ const HomePage = () => {
                     <CalendarIcon />
                     <div className="search-field-content">
                       <div style={{ color: 'white', fontSize: '16px', cursor: 'pointer' }}>
-                        {multiLegs[2]?.date ? formatDate(multiLegs[2].date) : 'When?'}
+                        {multiLegs[2]?.date ? formatDate(multiLegs[2].date) : translateCurrent('whenLabel')}
                       </div>
                     </div>
                   </div>
@@ -2256,7 +2504,7 @@ const HomePage = () => {
                             } catch { setMultiSuggest([]); }
                           }, 200);
                         }}
-                        placeholder="Where from?"
+                        placeholder={translateCurrent('whereFrom')}
                         style={{
                           background: 'transparent',
                           border: 'none',
@@ -2307,7 +2555,7 @@ const HomePage = () => {
                             } catch { setMultiSuggest([]); }
                           }, 200);
                         }}
-                        placeholder="Where to?"
+                        placeholder={translateCurrent('whereTo')}
                         style={{
                           background: 'transparent',
                           border: 'none',
@@ -2347,7 +2595,7 @@ const HomePage = () => {
                     <CalendarIcon />
                     <div className="search-field-content">
                       <div style={{ color: 'white', fontSize: '16px', cursor: 'pointer' }}>
-                        {multiLegs[3]?.date ? formatDate(multiLegs[3].date) : 'When?'}
+                        {multiLegs[3]?.date ? formatDate(multiLegs[3].date) : translateCurrent('whenLabel')}
                       </div>
                     </div>
                   </div>
@@ -2384,6 +2632,11 @@ const HomePage = () => {
 
 
 
+      {/* Promo Banner for Flights - перед фото с городами */}
+      {activeTab === 'flights' && (
+        <HomePromoBanner activeTab="flights" />
+      )}
+
       {/* Continue your search - ровно такие же размеры как Trending destinations */}
       {activeTab === 'flights' && (() => {
         try {
@@ -2402,7 +2655,7 @@ const HomePage = () => {
           const travellers = parseInt(adults) + childrenCount;
           return (
             <div className="destinations-section" key={`cs_${lastSearchVersion}`}>
-              <h2 className="section-title">Continue your search</h2>
+              <h2 className="section-title">{translateCurrent('continueYourSearch')}</h2>
               <div className="search-history-card" onClick={() => { window.location.href = `/flight-results?${raw}`; }}>
                 <img src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=120&h=120&fit=crop" alt="Flight" />
                 <div className="search-history-content">
@@ -2429,7 +2682,7 @@ const HomePage = () => {
       {activeTab === 'flights' && (
         <>
           <div className="destinations-section">
-            <h2 className="section-title">Trending destinations</h2>
+            <h2 className="section-title">{translateCurrent('trendingDestinations')}</h2>
             <p className="section-subtitle">Most popular routes this month</p>
             
             <div className="destinations-grid">
@@ -2563,25 +2816,25 @@ const HomePage = () => {
 
           {/* Offers Section */}
           <div className="offers-section">
-            <h2 className="section-title">Offers</h2>
-            <p className="section-subtitle">Promotions, deals, and special offers for you</p>
+            <h2 className="section-title">{translateCurrent('offersLabel')}</h2>
+            <p className="section-subtitle">{translateCurrent('offersSubtitle')}</p>
             
             <div className="offers-grid">
               <div className="offer-card">
                 <img src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=600&h=300&fit=crop" alt="Travel deals" />
                 <div className="offer-content">
-                  <h3 className="offer-title">Fly away to your dream holiday</h3>
-                  <p className="offer-desc">Get inspired, compare and book flights with more flexibility</p>
-                  <button className="offer-button" onClick={scrollToSearch}>Search for flights</button>
+                  <h3 className="offer-title">{translateCurrent('flyAwayToYourDreamHoliday')}</h3>
+                  <p className="offer-desc">{translateCurrent('getInspiredCompareAndBookFlights')}</p>
+                  <button className="offer-button" onClick={scrollToSearch}>{translateCurrent('searchForFlights')}</button>
                 </div>
               </div>
               
               <div className="offer-card">
                 <img src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&h=300&fit=crop" alt="Last minute" />
                 <div className="offer-content">
-                  <h3 className="offer-title">Save on domestic flights</h3>
-                  <p className="offer-desc">Book your next adventure and explore new destinations</p>
-                  <button className="offer-button" onClick={scrollToSearch}>Find deals</button>
+                  <h3 className="offer-title">{translateCurrent('saveOnDomesticFlights')}</h3>
+                  <p className="offer-desc">{translateCurrent('bookYourNextAdventure')}</p>
+                  <button className="offer-button" onClick={scrollToSearch}>{translateCurrent('findDeals')}</button>
                 </div>
               </div>
             </div>
@@ -2659,15 +2912,15 @@ const HomePage = () => {
       <nav className="bottom-nav">
         <div className="bottom-nav-item active" onClick={() => navigate('/')}>
           <SearchNavIcon />
-          <span className="bottom-nav-label">Search</span>
+          <span className="bottom-nav-label">{translateCurrent('searchLabel')}</span>
         </div>
         <div className="bottom-nav-item" onClick={() => navigate('/bookings')}>
           <BookingsNavIcon />
-          <span className="bottom-nav-label">Bookings</span>
+          <span className="bottom-nav-label">{translateCurrent('bookings')}</span>
         </div>
         <div className="bottom-nav-item" onClick={() => navigate('/favorites')}>
           <FavoritesNavIcon />
-          <span className="bottom-nav-label">Favorites</span>
+          <span className="bottom-nav-label">{translateCurrent('favorites')}</span>
         </div>
         {(() => {
           try {
@@ -2676,19 +2929,19 @@ const HomePage = () => {
                 <svg className="bottom-nav-icon" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z"/>
                 </svg>
-                <span className="bottom-nav-label">Profile</span>
+                <span className="bottom-nav-label">{translateCurrent('profileLabel')}</span>
               </div>
             ) : (
               <div className="bottom-nav-item" onClick={() => navigate('/auth?mode=signin')}>
                 <SignInNavIcon />
-                <span className="bottom-nav-label">Sign in</span>
+                <span className="bottom-nav-label">{translateCurrent('signIn')}</span>
               </div>
             );
           } catch {
             return (
               <div className="bottom-nav-item" onClick={() => navigate('/auth?mode=signin')}>
                 <SignInNavIcon />
-                <span className="bottom-nav-label">Sign in</span>
+                <span className="bottom-nav-label">{translateCurrent('signIn')}</span>
               </div>
             );
           }
@@ -2729,6 +2982,8 @@ const App = () => {
     return !hasLoadedBefore; // Show splash only if not loaded before
   });
 
+  const [showPromoNotification, setShowPromoNotification] = React.useState(false);
+
   React.useEffect(() => {
     if (showSplash) {
       // Mark that the app has been loaded in this session
@@ -2737,6 +2992,14 @@ const App = () => {
       // Hide splash screen after 2.5 seconds
       const timer = setTimeout(() => {
         setShowSplash(false);
+        // Show promo notification after splash screen
+        setTimeout(() => {
+          const hasSeenPromo = sessionStorage.getItem('has_seen_promo_notification');
+          if (!hasSeenPromo) {
+            setShowPromoNotification(true);
+            sessionStorage.setItem('has_seen_promo_notification', 'true');
+          }
+        }, 800);
       }, 2500);
 
       return () => clearTimeout(timer);
@@ -2746,6 +3009,9 @@ const App = () => {
   return (
     <>
       <SplashScreen isVisible={showSplash} />
+      {showPromoNotification && (
+        <WelcomePromoNotification onClose={() => setShowPromoNotification(false)} />
+      )}
       <div className={showSplash ? 'app-hidden' : 'app-visible'}>
         <Routes>
           <Route path="/" element={<HomePage />} />

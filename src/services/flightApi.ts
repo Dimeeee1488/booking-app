@@ -1,5 +1,6 @@
 // API конфигурация
 import { getCache, setCache } from './cache';
+import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 
 // Простая клиентская защита от спама: троттлинг и дедупликация in-flight
 const __rate_state: Record<string, number> = {};
@@ -114,6 +115,96 @@ export interface FlightSearchResponse {
   };
 }
 
+/**
+ * Получение детальной информации по конкретному авиабилету по токену.
+ * Оборачиваем серверный proxy `/api/flights/getFlightDetails`, чтобы не светить RapidAPI‑ключ на клиенте.
+ */
+export const getFlightDetails = async (
+  token: string,
+  currencyCode: string = 'USD',
+  retries: number = 3
+): Promise<ApiResponse<any>> => {
+  if (!token) {
+    throw new Error('Flight token is required');
+  }
+
+  // Всегда используем относительный путь /api, чтобы запросы шли через Vite proxy
+  // Это работает и в dev (через proxy), и в production (через server.cjs)
+  const params = new URLSearchParams();
+  params.append('token', token);
+  if (currencyCode) params.append('currency_code', currencyCode);
+
+  // Используем относительный путь, который будет проксироваться
+  const url = `/api/flights/getFlightDetails?${params.toString()}`;
+  
+  console.log('getFlightDetails: Request URL:', url);
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, { 
+        method: 'GET',
+        timeoutMs: 45000 // Увеличиваем таймаут до 45 секунд
+      });
+      
+      if (!response.ok) {
+        // Для 500 ошибок пробуем повторить
+        if (response.status === 500 && attempt < retries) {
+          console.warn(`getFlightDetails: 500 error, retrying (attempt ${attempt + 1}/${retries + 1})...`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1))); // Экспоненциальная задержка
+          continue;
+        }
+        const errorText = await response.text().catch(() => 'Unknown error');
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      }
+      
+      // Проверяем Content-Type перед парсингом JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('getFlightDetails: Non-JSON response:', text.substring(0, 200));
+        throw new Error('Server returned non-JSON response');
+      }
+      
+      const data = await response.json();
+      return data as ApiResponse<any>;
+    } catch (err: any) {
+      // AbortError - это нормально, просто таймаут или отмена запроса
+      if (err?.name === 'AbortError') {
+        console.warn(`getFlightDetails: Request aborted (timeout or cancelled), attempt ${attempt + 1}/${retries + 1}`);
+        // Если это последняя попытка, пробрасываем ошибку
+        if (attempt === retries) {
+          throw new Error('Request timeout. Please try again.');
+        }
+        // Иначе пробуем еще раз с задержкой
+        await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)));
+        continue;
+      }
+      
+      // Для других ошибок пробуем повторить только если это 500 и не последняя попытка
+      if (attempt < retries && err?.message?.includes('500')) {
+        console.warn(`getFlightDetails: Error, retrying (attempt ${attempt + 1}/${retries + 1})...`, err.message);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+        continue;
+      }
+      
+      // Если это последняя попытка или не 500 ошибка, пробрасываем дальше
+      if (attempt === retries) {
+        console.error('getFlightDetails: Final attempt failed', err);
+        // Если это ошибка парсинга JSON, добавляем больше информации
+        if (err instanceof SyntaxError) {
+          throw new Error(`Failed to parse response: ${err.message}. Token: ${token.substring(0, 20)}...`);
+        }
+        throw err;
+      }
+      
+      throw err;
+    }
+  }
+  
+  // Этот код не должен выполниться, но TypeScript требует возврат
+  throw new Error('Failed to load flight details after retries');
+};
+
 // Функции API
 export const searchFlights = async (
   originCode: string,
@@ -184,9 +275,15 @@ export const searchFlights = async (
       }
     }
   } catch {}
+  let fallbackCached: ApiResponse<FlightSearchResponse> | null = null;
   if (!force) {
     const cached = getCache<ApiResponse<FlightSearchResponse>>(cacheKey, 10 * 60 * 1000);
     if (cached) return cached;
+    // Более «долгий» кеш как тихий фолбэк, если API вернёт пусто или ошибку
+    fallbackCached = getCache<ApiResponse<FlightSearchResponse>>(cacheKey, 365 * 24 * 60 * 60 * 1000);
+  } else {
+    // Даже при force допускаем использование очень старого кеша в случае полного фейла API
+    fallbackCached = getCache<ApiResponse<FlightSearchResponse>>(cacheKey, 365 * 24 * 60 * 60 * 1000);
   }
 
   // Собираем строку запроса через URLSearchParams, чтобы не использовать new URL с относительным путём
@@ -215,11 +312,16 @@ export const searchFlights = async (
   const url = `${base}/flights/searchFlights?${params.toString()}`;
 
   const run = async (params: { omitReturn?: boolean } = {}) => {
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: 'GET',
+      timeoutMs: 30000, // 30 секунд для поиска рейсов
     });
 
     if (!response.ok) {
+      // Для 500 ошибок возвращаем более информативное сообщение
+      if (response.status === 500) {
+        throw new Error(`Server error (500). Please try again.`);
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
@@ -243,15 +345,26 @@ export const searchFlights = async (
         p2.append('currency_code', currencyCode);
         const base2 = API_CONFIG.baseUrl || '/api';
         const url2 = `${base2}/flights/searchFlights?${p2.toString()}`;
-        const r2 = await fetch(url2, { method: 'GET' });
+        const r2 = await fetchWithTimeout(url2, { method: 'GET' });
         if (r2.ok) {
           const d2 = await r2.json();
           const e2 = d2?.data?.error?.code || d2?.error?.code || '';
           if (!e2) return d2;
         }
       }
-      // Возвращаем пустой результат вместо исключения
+      // Возвращаем либо кешированный результат, либо пустой ответ
+      if (fallbackCached) {
+        console.warn('searchFlights: NO_FLIGHTS_FOUND, using cached flights fallback');
+        return fallbackCached as any;
+      }
       return { status: true, data: { flightOffers: [], aggregation: { totalCount: 0, airlines: [] } } } as any;
+    }
+
+    // Если API вернул валидный ответ, но без рейсов — пробуем использовать кеш как фолбэк
+    const offers = data?.data?.flightOffers || [];
+    if ((!offers || offers.length === 0) && fallbackCached) {
+      console.warn('searchFlights: API returned 0 offers, using cached flights fallback');
+      return fallbackCached as any;
     }
 
     if (data.data && data.data.error) {
@@ -269,11 +382,17 @@ export const searchFlights = async (
     return res;
   } catch (e) {
     delete __inflight[throttleId];
+    // При ошибке пробуем вернуть последний кеш, чтобы поиск «никогда не был пустым»
+    const cached = getCache<ApiResponse<FlightSearchResponse>>(cacheKey, 365 * 24 * 60 * 60 * 1000);
+    if (cached) {
+      console.warn('searchFlights: network/API error, using cached flights fallback');
+      return cached;
+    }
     throw e;
   }
 };
 
-export const searchAirports = async (query: string): Promise<Airport[]> => {
+export const searchAirports = async (query: string, retries: number = 2): Promise<Airport[]> => {
   const q = (query || '').trim().toLowerCase();
   const cacheKey = `airports:${q}`;
   const cached = getCache<Airport[]>(cacheKey, 24 * 60 * 60 * 1000);
@@ -283,28 +402,67 @@ export const searchAirports = async (query: string): Promise<Airport[]> => {
   const base = API_CONFIG.baseUrl || '/api';
   const url = `${base}/flights/searchDestination?${params.toString()}`;
 
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-    });
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, {
+        method: 'GET',
+        timeoutMs: 15000, // 15 секунд для searchDestination
+      });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.ok) {
+        // Для 500 ошибок пробуем повторить
+        if (response.status === 500 && attempt < retries) {
+          console.warn(`searchAirports: 500 error, retrying (attempt ${attempt + 1}/${retries + 1})...`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1))); // Экспоненциальная задержка
+          continue;
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const list = data.data || [];
+      if (list && list.length > 0) {
+        setCache(cacheKey, list);
+      }
+      return list;
+    } catch (error: any) {
+      // AbortError - это нормально, просто таймаут или отмена запроса
+      if (error?.name === 'AbortError') {
+        console.warn('searchAirports: Request aborted (timeout or cancelled)');
+        // Если это последняя попытка, возвращаем пустой массив вместо ошибки
+        if (attempt === retries) {
+          return [];
+        }
+        // Иначе пробуем еще раз
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+        continue;
+      }
+      
+      // Для других ошибок пробуем повторить только если это 500 и не последняя попытка
+      if (attempt < retries && error?.message?.includes('500')) {
+        console.warn(`searchAirports: Error, retrying (attempt ${attempt + 1}/${retries + 1})...`, error.message);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+        continue;
+      }
+      
+      // Если это последняя попытка или не 500 ошибка, пробрасываем дальше
+      if (attempt === retries) {
+        console.error('searchAirports: Final attempt failed', error);
+        // Возвращаем пустой массив вместо ошибки, чтобы не ломать поиск
+        return [];
+      }
+      
+      throw error as Error;
     }
-
-    const data = await response.json();
-    const list = data.data || [];
-    setCache(cacheKey, list);
-    return list;
-  } catch (error) {
-    throw error as Error;
   }
+  
+  return [];
 };
 
 // Geolocation-based currency
 export const detectCurrencyByIP = async (): Promise<{ country?: string; currency?: string } | null> => {
   try {
-    const resp = await fetch('https://ipapi.co/json/');
+    const resp = await fetchWithTimeout('https://ipapi.co/json/');
     if (!resp.ok) return null;
     const data = await resp.json();
     // ipapi returns currency like "USD", country_code, country_name
@@ -317,7 +475,7 @@ export const detectCurrencyByIP = async (): Promise<{ country?: string; currency
 // Утилиты для форматирования
 export const formatPrice = (units: number, nanos: number, currency: string = 'AED'): string => {
   const total = units + (nanos / 1000000000);
-  return `${currency} ${Math.round(total).toLocaleString('en-US')}`;
+  return `${currency} ${Number(total.toFixed(2))}`;
 };
 
 export const formatDuration = (minutes: number): string => {
@@ -380,7 +538,7 @@ export const searchFlightsMultiStops = async (
   const base = API_CONFIG.baseUrl || '/api';
   const url = `${base}/flights/searchFlightsMultiStops?${params.toString()}`;
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: 'GET',
     });
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -440,7 +598,7 @@ export const getSeatMap = async (offerToken: string, currency: string = 'USD'): 
 
   let response: Response;
   try {
-    const p = fetch(requestUrl, {
+    const p = fetchWithTimeout(requestUrl, {
       method: 'GET',
     });
     // @ts-ignore

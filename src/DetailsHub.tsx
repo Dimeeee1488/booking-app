@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from './hooks/useTranslation';
 import './DetailsHub.css';
 
 const BackIcon = () => (
@@ -15,6 +16,7 @@ type TravCard = { label: string; sub: string; needsDetails: boolean; missingReas
 const DetailsHub: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation() as any;
+  const { t } = useTranslation();
   const [price, setPrice] = React.useState<{currency:string; totalPerTraveller:number; travellers:number} | null>(null);
   const [travSummaries, setTravSummaries] = React.useState<TravCard[]>([]);
   const [contact, setContact] = React.useState<{ email?: string; phone?: string } | null>(null);
@@ -47,22 +49,23 @@ const DetailsHub: React.FC = () => {
           const key = offerId ? `traveler_details_${offerId}_${idx}` : `traveler_details_${idx}`;
           const raw = localStorage.getItem(key) || sessionStorage.getItem(key) || '';
           if (raw) {
-            const t = JSON.parse(raw);
-            firstName = t.firstName || '';
-            lastName = t.lastName || '';
-            gender = t.gender || '';
-            dd = t.dd || '';
-            mm = t.mm || '';
-            yyyy = t.yyyy || '';
+            const travelerData = JSON.parse(raw);
+            firstName = travelerData.firstName || '';
+            lastName = travelerData.lastName || '';
+            gender = travelerData.gender || '';
+            dd = travelerData.dd || '';
+            mm = travelerData.mm || '';
+            yyyy = travelerData.yyyy || '';
           }
         } catch {}
-        const label = `Traveler ${i + 1}`;
+        const label = `${t('travelerNumberWithAdult').replace('{number}', String(i + 1))}`;
         const childAgeStr = !isAdult ? String(kids[i - adults] ?? '') : '';
         const childAgeNum = !isAdult ? Number(childAgeStr) : NaN;
         const ageValid = isAdult ? true : Number.isFinite(childAgeNum) && childAgeNum >= 0 && childAgeNum <= 17;
+        const genderText = gender === 'Male' ? t('male') : (gender === 'Female' ? t('female') : '');
         const infoLine = isAdult
-          ? ('Adult' + ((gender === 'Male' || gender === 'Female') ? ` · ${gender}` : ''))
-          : (`Child${ageValid ? `, ${childAgeNum} y.o.` : ''}`);
+          ? (t('adults') + (genderText ? ` · ${genderText}` : ''))
+          : (t('children') + (ageValid ? `, ${childAgeNum} ${t('yearsOld')}` : ''));
         const namesOk = Boolean((firstName || '').trim()) && Boolean((lastName || '').trim());
         const genderOk = gender === 'Male' || gender === 'Female' || !isAdult;
         const dobOk = isValidDate(dd, mm, yyyy);
@@ -88,10 +91,10 @@ const DetailsHub: React.FC = () => {
 
       setCanProceed(allTravOk && emailOk && phoneOk && total > 0);
     } catch {
-      setTravSummaries([{ label: 'Traveler 1', sub: 'Adult', needsDetails: true }]);
+      setTravSummaries([{ label: t('traveler1'), sub: t('adults'), needsDetails: true }]);
       setCanProceed(false);
     }
-  }, [isValidDate]);
+  }, [isValidDate, t]);
 
   React.useEffect(() => {
     try {
@@ -116,24 +119,24 @@ const DetailsHub: React.FC = () => {
     <div className="hub-page">
       <div className="hub-header">
         <button className="back-button" onClick={()=>navigate(-1)}><BackIcon/></button>
-        <h1>Traveler details</h1>
+        <h1>{t('travelerDetails')}</h1>
         <div style={{ width:24 }}></div>
       </div>
 
       {/* stepper removed per request */}
 
       <div className="hub-list">
-        {travSummaries.map((t, idx) => {
-          const ok = !t.needsDetails;
+        {travSummaries.map((traveler, idx) => {
+          const ok = !traveler.needsDetails;
           return (
             <div key={idx} className="hub-card" onClick={()=>navigate(`/traveler-details?idx=${idx}`)}>
               <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
                 {renderTravelerIcon(ok)}
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div className="hub-title">{t.label}</div>
-                  <div className="hub-sub">{t.sub}</div>
-                  {t.needsDetails && (
-                    <div className="hub-link">{t.missingReason === 'age' ? "Add child's age" : 'Add details for this traveler'}</div>
+                  <div className="hub-title">{traveler.label}</div>
+                  <div className="hub-sub">{traveler.sub}</div>
+                  {traveler.needsDetails && (
+                    <div className="hub-link">{traveler.missingReason === 'age' ? t('addChildAge') : t('addDetailsForTraveler')}</div>
                   )}
                 </div>
               </div>
@@ -145,11 +148,11 @@ const DetailsHub: React.FC = () => {
         <div className="hub-card" onClick={()=>navigate('/contact-details')}>
           <div>
             <div>
-              <div className="hub-title">Contact details</div>
+              <div className="hub-title">{t('contactDetails')}</div>
               {contact?.email || contact?.phone ? (
                 <div className="hub-sub">{contact?.email || ''}{contact?.email && contact?.phone ? ' · ' : ''}{contact?.phone || ''}</div>
               ) : (
-                <div className="hub-link">Add contact details</div>
+                <div className="hub-link">{t('addContactDetailsLabel')}</div>
               )}
             </div>
           </div>
@@ -158,11 +161,11 @@ const DetailsHub: React.FC = () => {
       </div>
 
       <div className="hub-footer">
-        <div className="price">{price ? `${price.currency} ${Math.round(price.totalPerTraveller*price.travellers).toLocaleString()}` : ''}</div>
+        <div className="price">{price ? `${price.currency} ${Number((price.totalPerTraveller*price.travellers).toFixed(2))}` : ''}</div>
         <button className="next-button" disabled={!canProceed} onClick={()=>{
           if (!price || !canProceed) return;
           navigate('/seat-selection', { state: { currency: price.currency, travellers: price.travellers, totalPerTraveller: price.totalPerTraveller, flightSummary: location?.state?.flightSummary || null, offerId: location?.state?.offerId || null } });
-        }}>Next</button>
+        }}>{t('next')}</button>
       </div>
     </div>
   );

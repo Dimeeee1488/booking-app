@@ -1,20 +1,13 @@
 import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import './AttractionAvailability.css';
+import { useTranslation } from './hooks/useTranslation';
 
 const DETAIL_CACHE_PREFIX = 'attractionDetail';
 
 type TicketKey = 'adult' | 'teen' | 'child' | 'infant';
 
-const TICKET_TYPES: Record<
-  TicketKey,
-  { label: string; ageRange: string; multiplier: number; description?: string }
-> = {
-  adult: { label: 'Adult', ageRange: '13 – 99', multiplier: 1 },
-  teen: { label: 'Teen', ageRange: '9 – 12', multiplier: 0.9 },
-  child: { label: 'Child', ageRange: '4 – 8', multiplier: 0.85 },
-  infant: { label: 'Infant', ageRange: '0 – 3', multiplier: 0 },
-};
+// TICKET_TYPES will be created inside component to use translations
 
 interface TicketSelectionSummary {
   slug: string;
@@ -39,6 +32,7 @@ const AttractionAvailability: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const slug = searchParams.get('id');
+  const { t } = useTranslation();
 
   const [attraction, setAttraction] = React.useState<any>(null);
   const [ticketCounts, setTicketCounts] = React.useState<Record<TicketKey, number>>({
@@ -48,6 +42,13 @@ const AttractionAvailability: React.FC = () => {
     infant: 0,
   });
   const [selectedLanguage, setSelectedLanguage] = React.useState<string | null>(null);
+
+  const TICKET_TYPES = React.useMemo(() => ({
+    adult: { label: t('adultLabel'), ageRange: t('adultAgeRange'), multiplier: 1 },
+    teen: { label: t('teenLabel'), ageRange: t('teenAgeRange'), multiplier: 0.9 },
+    child: { label: t('childLabel'), ageRange: t('childAgeRange'), multiplier: 0.85 },
+    infant: { label: t('infantLabel'), ageRange: t('infantAgeRange'), multiplier: 0 },
+  }), [t]);
 
   React.useEffect(() => {
     if (!slug) return;
@@ -67,10 +68,10 @@ const AttractionAvailability: React.FC = () => {
     }
   }, [slug]);
 
-  const basePrice =
-    attraction?.representativePrice?.publicAmount ??
-    attraction?.representativePrice?.chargeAmount ??
-    0;
+  // Нормализуем базовую цену с точностью до 2 знаков после запятой для согласованности
+  // Используем publicAmount как приоритетную цену, chargeAmount как fallback
+  const rawBasePrice = attraction?.representativePrice?.publicAmount ?? attraction?.representativePrice?.chargeAmount ?? 0;
+  const basePrice = Number(rawBasePrice.toFixed(2));
   const currency = attraction?.representativePrice?.currency ?? 'USD';
 
   const languageOptions = React.useMemo(() => {
@@ -105,7 +106,9 @@ const AttractionAvailability: React.FC = () => {
 
   const getTicketPrice = (type: TicketKey) => {
     if (type === 'infant') return 0;
-    return basePrice * TICKET_TYPES[type].multiplier;
+    // Умножаем нормализованную базовую цену на multiplier и нормализуем результат
+    const price = basePrice * TICKET_TYPES[type].multiplier;
+    return Number(price.toFixed(2));
   };
 
   const formatPrice = (value: number) =>
@@ -116,10 +119,13 @@ const AttractionAvailability: React.FC = () => {
       maximumFractionDigits: 2,
     }).format(value);
 
-  const total = (Object.keys(ticketCounts) as TicketKey[]).reduce((sum, type) => {
-    const price = getTicketPrice(type);
-    return sum + ticketCounts[type] * price;
-  }, 0);
+  // Вычисляем итоговую цену с точностью до 2 знаков после запятой
+  // Каждая цена билета уже нормализована в getTicketPrice
+  const total = Number(((Object.keys(ticketCounts) as TicketKey[]).reduce((sum, type) => {
+    const pricePerTicket = getTicketPrice(type);
+    const subtotal = ticketCounts[type] * pricePerTicket;
+    return sum + subtotal;
+  }, 0)).toFixed(2));
 
   const selectionBreakdown = React.useMemo(() => {
     return (Object.keys(ticketCounts) as TicketKey[]).map((type) => {
@@ -129,8 +135,8 @@ const AttractionAvailability: React.FC = () => {
         type,
         label: TICKET_TYPES[type].label,
         count,
-        pricePerTicket,
-        subtotal: count * pricePerTicket,
+        pricePerTicket: Number(pricePerTicket.toFixed(2)),
+        subtotal: Number((count * pricePerTicket).toFixed(2)),
       };
     });
   }, [ticketCounts, basePrice]);
@@ -170,14 +176,14 @@ const AttractionAvailability: React.FC = () => {
     return (
       <div className="availability-page">
         <div className="availability-header">
-          <button className="back-btn" onClick={() => navigate(-1)} aria-label="Back">
+          <button className="back-btn" onClick={() => navigate(-1)} aria-label={t('back')}>
             ←
           </button>
-          <h1>Availability</h1>
+          <h1>{t('availability')}</h1>
           <div className="header-spacer" />
         </div>
         <div className="availability-empty">
-          <p>Attraction data is unavailable. Please reopen the detail page.</p>
+          <p>{t('attractionDataUnavailable')}</p>
         </div>
       </div>
     );
@@ -195,7 +201,7 @@ const AttractionAvailability: React.FC = () => {
         <button className="back-btn" onClick={() => navigate(-1)} aria-label="Back">
           ←
         </button>
-        <h1>Availability</h1>
+        <h1>{t('availability')}</h1>
         <div className="header-spacer" />
       </div>
 
@@ -208,7 +214,7 @@ const AttractionAvailability: React.FC = () => {
               </span>
             ))}
             {attraction.cancellationPolicy?.hasFreeCancellation && (
-              <span className="hero-chip positive">Free cancellation</span>
+              <span className="hero-chip positive">{t('freeCancellationAvailable')}</span>
             )}
           </div>
           <div className="hero-body">
@@ -218,8 +224,8 @@ const AttractionAvailability: React.FC = () => {
                 <span className="rating-pill">
                   ⭐ {attraction.reviewsStats?.combinedNumericStats?.average?.toFixed(1) ?? 'New'} ·{' '}
                   {attraction.reviewsStats?.combinedNumericStats?.total
-                    ? `${attraction.reviewsStats.combinedNumericStats.total} reviews`
-                    : 'Brand new'}
+                    ? `${attraction.reviewsStats.combinedNumericStats.total} ${t('reviews')}`
+                    : t('brandNew')}
                 </span>
                 {languageOptions.length > 0 && (
                   <span className="hero-languages">
@@ -243,39 +249,39 @@ const AttractionAvailability: React.FC = () => {
               <p className="ticket-title">{attraction.name}</p>
               <p className="ticket-subtitle">
                 {attraction.cancellationPolicy?.hasFreeCancellation
-                  ? 'Free cancellation available'
-                  : 'Flexible booking options'}
+                  ? t('freeCancellationAvailable')
+                  : t('flexibleBookingOptions')}
               </p>
             </div>
-            <div className="ticket-badge">Available ticket</div>
+            <div className="ticket-badge">{t('availableTicket')}</div>
           </header>
 
           <div className="ticket-meta">
             <div className="meta-card">
-              <span className="detail-label">Starts at</span>
+              <span className="detail-label">{t('startsAt')}</span>
               <span className="detail-value">{attraction.startTimes?.[0] || '14:00'}</span>
             </div>
             <div className="meta-card">
-              <span className="detail-label">Pickup</span>
+              <span className="detail-label">{t('pickup')}</span>
               <span className="detail-value">
                 {attraction.whatsIncluded?.some((item: string) =>
                   item.toLowerCase().includes('pickup')
                 )
-                  ? 'Pickup included'
-                  : 'Meet on location'}
+                  ? t('pickupIncluded')
+                  : t('meetOnLocation')}
               </span>
             </div>
             {attraction.cancellationPolicy?.hasFreeCancellation && (
               <div className="meta-card">
-                <span className="detail-label">Cancellation</span>
+                <span className="detail-label">{t('cancellationPolicy')}</span>
                 <span className="detail-value">
-                  Free cancellation before start time
+                  {t('cancellationBeforeStartTime')}
                 </span>
               </div>
             )}
             {languageOptions.length > 0 && selectedLanguage && (
               <div className="meta-card meta-card-language">
-                <span className="detail-label">Language options</span>
+                <span className="detail-label">{t('languageOptions')}</span>
                 <div className="language-chips">
                   {languageOptions.map((lang) => (
                     <button
@@ -295,7 +301,7 @@ const AttractionAvailability: React.FC = () => {
           </div>
 
           <div className="ticket-quantity">
-            <p className="section-label">How many tickets?</p>
+            <p className="section-label">{t('howManyTickets')}</p>
             <div className="ticket-rows">
               {(Object.keys(TICKET_TYPES) as TicketKey[]).map((type) => (
                 <div key={type} className="ticket-row">
@@ -305,7 +311,7 @@ const AttractionAvailability: React.FC = () => {
                       <span className="ticket-age">({TICKET_TYPES[type].ageRange})</span>
                     </p>
                     {type === 'infant' ? (
-                      <p className="ticket-price">Free</p>
+                      <p className="ticket-price">{t('freeLabel')}</p>
                     ) : (
                       <span className="ticket-price">
                         {formatPrice(getTicketPrice(type))}
@@ -324,11 +330,11 @@ const AttractionAvailability: React.FC = () => {
 
           <div className="ticket-total">
             <div>
-              <p className="total-label">Total</p>
+              <p className="total-label">{t('total')}</p>
               <p className="total-value">{formatPrice(total)}</p>
             </div>
             <button className="next-btn" onClick={handleNext} disabled={total === 0}>
-              Next
+              {t('next')}
             </button>
           </div>
         </section>

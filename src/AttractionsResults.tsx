@@ -2,6 +2,9 @@ import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import './AttractionsResults.css';
 import AttractionResultsLoadingAnimation from './components/AttractionResultsLoadingAnimation';
+import { getPreferredLanguageCode, subscribeToPreferredLanguage } from './utils/language';
+import { fetchWithTimeout } from './utils/fetchWithTimeout';
+import { useTranslation } from './hooks/useTranslation';
 
 interface AttractionProduct {
   id: string;
@@ -46,6 +49,7 @@ const resolveApiBaseUrl = () => {
 
 const AttractionsResults: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const [attractions, setAttractions] = React.useState<AttractionProduct[]>([]);
   const [filteredAttractions, setFilteredAttractions] = React.useState<AttractionProduct[]>([]);
@@ -67,6 +71,15 @@ const AttractionsResults: React.FC = () => {
   const locationId = searchParams.get('id');
   const locationName = searchParams.get('name') || 'Attractions';
   const date = searchParams.get('date');
+  const currency = searchParams.get('currency') || 'USD';
+  const [languageCode, setLanguageCode] = React.useState(getPreferredLanguageCode());
+
+  React.useEffect(() => {
+    const unsubscribe = subscribeToPreferredLanguage((language) => {
+      setLanguageCode(language.code);
+    });
+    return unsubscribe;
+  }, []);
 
   console.log('AttractionsResults - URL params:', { locationId, locationName, date });
   
@@ -95,7 +108,10 @@ const AttractionsResults: React.FC = () => {
 
   // Helper functions for filtering and sorting
   const getAttractionPrice = (attraction: AttractionProduct) => {
-    return attraction.representativePrice?.publicAmount || 0;
+    // Используем publicAmount как приоритетную цену, chargeAmount как fallback
+    // Нормализуем цену с точностью до 2 знаков после запятой
+    const price = attraction.representativePrice?.publicAmount ?? attraction.representativePrice?.chargeAmount ?? 0;
+    return Number(price.toFixed(2));
   };
 
   const getAttractionRating = (attraction: AttractionProduct) => {
@@ -114,8 +130,8 @@ const AttractionsResults: React.FC = () => {
   const RESULTS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   const currentCacheKey = React.useMemo(() => {
     const identifier = locationId ? `id:${locationId}` : `name:${(locationName || '').toLowerCase()}`;
-    return `${identifier}|sort:${sortBy}|page:${currentPage}`;
-  }, [locationId, locationName, sortBy, currentPage]);
+    return `${identifier}|sort:${sortBy}|page:${currentPage}|lang:${languageCode}`;
+  }, [locationId, locationName, sortBy, currentPage, languageCode]);
 
   const readResultsCache = React.useCallback(
     (key: string): AttractionsResultsCachePayload | null => {
@@ -182,13 +198,16 @@ const AttractionsResults: React.FC = () => {
         return;
       }
       console.log('Cache stale, refreshing silently');
+      // Fetch new results in background without clearing current ones
       fetchAttractions(currentCacheKey, { silent: true });
       return;
     }
 
     console.log('No cache available, fetching from API');
+    // Если нет кэша, запускаем полноценную загрузку с лоадером
+    setLoading(true);
     fetchAttractions(currentCacheKey);
-  }, [locationId, locationName, sortBy, currentPage, currentCacheKey, readResultsCache, applyCachedResults]);
+  }, [locationId, locationName, sortBy, currentPage, currentCacheKey, readResultsCache, applyCachedResults, languageCode]);
 
   // Filter and sort attractions
   React.useEffect(() => {
@@ -246,7 +265,7 @@ const AttractionsResults: React.FC = () => {
         return;
       }
       
-      let url = `${apiBaseUrl}/attractions/searchAttractions?id=${locationId}&sortBy=${sortBy}&page=${currentPage}&currency_code=USD&languagecode=en-us`;
+      let url = `${apiBaseUrl}/attractions/searchAttractions?id=${locationId}&sortBy=${sortBy}&page=${currentPage}&currency_code=${currency}&languagecode=${languageCode}`;
       
       // Добавляем даты если они есть
       if (startDate) {
@@ -259,7 +278,7 @@ const AttractionsResults: React.FC = () => {
       
       console.log('Fetching attractions with URL:', url);
       
-      const response = await fetch(url);
+      const response = await fetchWithTimeout(url, { timeoutMs: 30000 });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -278,8 +297,13 @@ const AttractionsResults: React.FC = () => {
           totalPages: total,
         });
       } else {
-        console.log('No attractions found or API error');
-        setAttractions([]);
+        console.log('No attractions found or API error, trying cache fallback');
+        const fallbackCache = readResultsCache(cacheKey || currentCacheKey);
+        if (fallbackCache) {
+          applyCachedResults(fallbackCache);
+        } else {
+          setAttractions([]);
+        }
       }
     } catch (err: any) {
       console.error('Error fetching attractions:', err);
@@ -288,6 +312,10 @@ const AttractionsResults: React.FC = () => {
         if (fallbackCache) {
           console.warn('Falling back to cached attractions due to fetch error');
           applyCachedResults(fallbackCache);
+          return;
+        }
+        if (err?.name === 'AbortError') {
+          setError('Request timed out. Please try again.');
           return;
         }
         const isNetworkError = err?.name === 'TypeError';
@@ -308,8 +336,8 @@ const AttractionsResults: React.FC = () => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(amount);
   };
 
@@ -351,7 +379,7 @@ const AttractionsResults: React.FC = () => {
           <button className="back-button" onClick={() => navigate('/')}>
             ← Back to search
           </button>
-          <h1>Attractions in {locationName}</h1>
+          <h1>{t('attractionsIn')} {locationName}</h1>
         </div>
         <div className="error-container">
           <p>{error}</p>
@@ -367,10 +395,20 @@ const AttractionsResults: React.FC = () => {
     <div className="attractions-results">
       <div className="attractions-header">
         <h1 className="clickable-title" onClick={() => navigate('/')}>
-          Attractions in {locationName}
+          {t('attractionsIn')} {locationName}
         </h1>
         {date && <p className="search-date">For {date}</p>}
-        
+
+        {/* Inline promo banner for attractions */}
+        <div className="section-promo-inline section-promo-inline--attractions">
+          <div className="section-promo-title">
+            {t('promoAttractionsTitle') || 'Attraction discounts applied'}
+          </div>
+          <div className="section-promo-text">
+            {t('promoAttractionsDesc') || 'Save 45% on attractions and experiences today'}
+          </div>
+        </div>
+
         {/* Action Buttons: Sort, Filter */}
         <div className="action-bar">
           <button className="action-btn" onClick={() => setShowSortModal(true)}>
@@ -384,7 +422,7 @@ const AttractionsResults: React.FC = () => {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <path d="M3 6h18M7 12h10M10 18h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
             </svg>
-            <span>Filters</span>
+            <span>{t('filtersLabel')}</span>
           </button>
         </div>
       </div>
@@ -440,7 +478,39 @@ const AttractionsResults: React.FC = () => {
                   </div>
                   
                   <div className="attraction-content">
-                    <h3 className="attraction-title">{attraction.name}</h3>
+                    <div className="attraction-header">
+                      <div className="attraction-title-wrapper">
+                        <h3 className="attraction-title">{attraction.name}</h3>
+                      </div>
+                      <div className="attraction-price">
+                        {attraction.representativePrice ? (
+                          <>
+                            {(() => {
+                              const rawPrice = getAttractionPrice(attraction);
+                              const discounted = Number((rawPrice * 0.55).toFixed(2)); // 45% скидка
+                              const currencyCode = attraction.representativePrice?.currency || currency;
+                              return (
+                                <>
+                                  <div className="attraction-price-row">
+                                    <span className="price-original">
+                                      {formatPrice(rawPrice, currencyCode)}
+                                    </span>
+                                    <span className="attraction-discount-badge">45% OFF</span>
+                                  </div>
+                                  <span className="price-amount">
+                                    {formatPrice(discounted, currencyCode)}
+                                  </span>
+                                </>
+                              );
+                            })()}
+                          </>
+                        ) : (
+                          <span className="price-amount">Price not available</span>
+                        )}
+                        <span className="price-per">per person</span>
+                      </div>
+                    </div>
+                    
                     <p className="attraction-description">{attraction.shortDescription}</p>
                     
                     <div className="attraction-rating">
@@ -458,16 +528,6 @@ const AttractionsResults: React.FC = () => {
                           </span>
                         </>
                       )}
-                    </div>
-                    
-                    <div className="attraction-price">
-                      <span className="price-amount">
-                        {attraction.representativePrice ? 
-                          formatPrice(attraction.representativePrice.publicAmount, attraction.representativePrice.currency) :
-                          'Price not available'
-                        }
-                      </span>
-                      <span className="price-per">per person</span>
                     </div>
                   </div>
                 </div>
@@ -504,7 +564,7 @@ const AttractionsResults: React.FC = () => {
         <div className="modal-overlay" onClick={() => setShowFiltersModal(false)}>
           <div className="currency-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Filters</h3>
+              <h3>{t('filtersLabel')}</h3>
               <button className="close-btn" onClick={() => setShowFiltersModal(false)}>×</button>
             </div>
             <div className="currency-list">

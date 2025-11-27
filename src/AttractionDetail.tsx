@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import './AttractionDetail.css';
+import { getPreferredLanguageCode, subscribeToPreferredLanguage } from './utils/language';
+import { useTranslation } from './hooks/useTranslation';
+import { fetchWithTimeout } from './utils/fetchWithTimeout';
 
 const DETAIL_CACHE_PREFIX = 'attractionDetail';
 const DETAIL_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
@@ -13,6 +16,7 @@ interface AttractionDetailCachePayload {
 const AttractionDetail: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   
   const attractionId = searchParams.get('id');
   const attractionName = searchParams.get('name');
@@ -22,6 +26,19 @@ const AttractionDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showAllPhotos, setShowAllPhotos] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
+  const [languageCode, setLanguageCode] = useState(getPreferredLanguageCode());
+
+  useEffect(() => {
+    const unsubscribe = subscribeToPreferredLanguage((language) => {
+      setLanguageCode(language.code);
+    });
+    return unsubscribe;
+  }, []);
+
+  const detailCacheKey = React.useMemo(
+    () => (attractionId ? `${attractionId}|lang:${languageCode}` : null),
+    [attractionId, languageCode]
+  );
 
   const readDetailCache = React.useCallback((slug: string | null): AttractionDetailCachePayload | null => {
     if (!slug) return null;
@@ -52,7 +69,7 @@ const AttractionDetail: React.FC = () => {
     console.log('AttractionDetail useEffect - attractionName:', attractionName);
     if (!attractionId) return;
 
-    const cached = readDetailCache(attractionId);
+    const cached = readDetailCache(detailCacheKey);
     if (cached?.data) {
       console.log('Restoring attraction detail from cache');
       setAttraction(cached.data);
@@ -62,12 +79,12 @@ const AttractionDetail: React.FC = () => {
         return;
       }
       console.log('Cached attraction detail is stale, refreshing silently');
-      fetchAttractionDetails({ silent: true, cacheKey: attractionId, saveDetailCache });
+      fetchAttractionDetails({ silent: true, cacheKey: detailCacheKey, saveDetailCache });
       return;
     }
 
-    fetchAttractionDetails({ cacheKey: attractionId, saveDetailCache });
-  }, [attractionId, attractionName, readDetailCache, saveDetailCache]);
+    fetchAttractionDetails({ cacheKey: detailCacheKey, saveDetailCache });
+  }, [attractionId, attractionName, detailCacheKey, readDetailCache, saveDetailCache]);
 
   const fetchAttractionDetails = async ({
     silent = false,
@@ -92,9 +109,10 @@ const AttractionDetail: React.FC = () => {
       if (attractionId) {
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
         console.log('Fetching attraction details for slug:', attractionId);
-        console.log('API URL:', `${API_BASE_URL}/attractions/getAttractionDetails?slug=${attractionId}&currency_code=USD&languagecode=en-us`);
+        const apiUrl = `${API_BASE_URL}/attractions/getAttractionDetails?slug=${encodeURIComponent(attractionId)}&currency_code=USD&languagecode=${languageCode}`;
+        console.log('API URL:', apiUrl);
         
-        const response = await fetch(`${API_BASE_URL}/attractions/getAttractionDetails?slug=${attractionId}&currency_code=USD&languagecode=en-us`);
+        const response = await fetchWithTimeout(apiUrl, { timeoutMs: 30000 });
         
         console.log('Response status:', response.status);
         console.log('Response ok:', response.ok);
@@ -163,9 +181,13 @@ const AttractionDetail: React.FC = () => {
       };
       
       setAttraction(mockAttraction);
-    } catch (err) {
+    } catch (err: any) {
       if (!silent) {
+        if (err?.name === 'AbortError') {
+          setError('Request timed out. Please try again.');
+        } else {
         setError('Failed to load attraction details');
+        }
       }
       console.error('Error fetching attraction details:', err);
     } finally {
@@ -226,7 +248,10 @@ const AttractionDetail: React.FC = () => {
 
   const formatPrice = (price: any) => {
     if (!price) return 'Price not available';
-    return `${price.currency} ${price.publicAmount || price.chargeAmount}`;
+    // Используем publicAmount как приоритетную цену, chargeAmount как fallback
+    // Нормализуем цену с точностью до 2 знаков после запятой для согласованности
+    const amount = price.publicAmount ?? price.chargeAmount ?? 0;
+    return `${price.currency} ${Number(amount.toFixed(2))}`;
   };
 
   const getDuration = () => {
@@ -238,21 +263,21 @@ const AttractionDetail: React.FC = () => {
 
   const getCancellationPolicy = () => {
     if (attraction?.cancellationPolicy?.hasFreeCancellation) {
-      return 'Free cancellation available';
+      return t('freeCancellationAvailable');
     }
-    return 'Cancellation policy varies';
+    return t('cancellationPolicyVaries');
   };
 
   const getFlagLabel = (flag: string) => {
     const flagLabels: { [key: string]: string } = {
-      'bestseller': 'Bestseller',
-      'popularFor1Traveler': 'Popular for 1 traveler',
-      'popularFor2Travelers': 'Popular for 2 travelers',
-      'popularFor3Travelers': 'Popular for 3 travelers',
-      'aiBadgesExpertGuide': 'Expert Guide',
-      'aiBadgesAdmissionIncluded': 'Admission Included',
-      'aiBadgesPickup': 'Pickup Available',
-      'aiBadgesAudio': 'Audio Guide'
+      'bestseller': t('bestsellerLabel'),
+      'popularFor1Traveler': t('popularForTrips').replace('{count}', '1'),
+      'popularFor2Travelers': t('popularForTrips').replace('{count}', '2'),
+      'popularFor3Travelers': t('popularForTrips').replace('{count}', '3'),
+      'aiBadgesExpertGuide': t('expertGuide'),
+      'aiBadgesAdmissionIncluded': t('included'),
+      'aiBadgesPickup': t('pickupIncluded'),
+      'aiBadgesAudio': t('audioGuide')
     };
     return flagLabels[flag] || flag;
   };
@@ -263,6 +288,42 @@ const AttractionDetail: React.FC = () => {
     if (flag.startsWith('aiBadges')) return '#2196f3';
     return '#666';
   };
+
+  const images = getImages();
+
+  // Move useEffect before any conditional returns to fix "Rendered more hooks" error
+  useEffect(() => {
+    if (!showAllPhotos || images.length === 0) return;
+
+    const preloadImage = (url: string) => {
+      const img = new Image();
+      img.src = url;
+    };
+
+    const nextIndex = (selectedPhotoIndex + 1) % images.length;
+    const prevIndex = (selectedPhotoIndex - 1 + images.length) % images.length;
+
+    if (images[nextIndex]) preloadImage(images[nextIndex]);
+    if (images[prevIndex]) preloadImage(images[prevIndex]);
+  }, [selectedPhotoIndex, showAllPhotos, images]);
+
+  // Ensure all variables used in debug/logging are defined BEFORE usage or conditionals
+  const rating = attraction?.reviewsStats?.combinedNumericStats?.average || 0;
+  const reviewCount = attraction?.reviewsStats?.combinedNumericStats?.total || 0;
+  const duration = getDuration();
+  const guideLanguages = Array.isArray(attraction?.guideSupportedLanguages)
+    ? attraction.guideSupportedLanguages.join(', ')
+    : null;
+  const cityName = attraction?.ufiDetails?.bCityName || attraction?.addresses?.arrival?.[0]?.city;
+
+  // Debug information
+  console.log('AttractionDetail render:', {
+    attractionId,
+    attractionName,
+    attraction: attraction,
+    images: images,
+    rating: rating
+  });
 
   if (loading) {
     return (
@@ -322,24 +383,6 @@ const AttractionDetail: React.FC = () => {
     );
   }
 
-  const images = getImages();
-  const rating = attraction?.reviewsStats?.combinedNumericStats?.average || 0;
-  const reviewCount = attraction?.reviewsStats?.combinedNumericStats?.total || 0;
-  const duration = getDuration();
-  const guideLanguages = Array.isArray(attraction?.guideSupportedLanguages)
-    ? attraction.guideSupportedLanguages.join(', ')
-    : null;
-  const cityName = attraction?.ufiDetails?.bCityName || attraction?.addresses?.arrival?.[0]?.city;
-
-  // Debug information
-  console.log('AttractionDetail render:', {
-    attractionId,
-    attractionName,
-    attraction: attraction,
-    images: images,
-    rating: rating
-  });
-
   return (
     <div className="attraction-detail">
       {/* Header */}
@@ -365,7 +408,7 @@ const AttractionDetail: React.FC = () => {
 
       {cityName && (
         <div className="attraction-badge">
-          In {cityName}
+          {t('inLabel')} {cityName}
         </div>
       )}
 
@@ -397,7 +440,7 @@ const AttractionDetail: React.FC = () => {
           </div>
           <span className="rating-score">{rating.toFixed(1)}</span>
         <span className="rating-text">
-          {reviewCount > 0 ? `${reviewCount} reviews` : 'New on our platform'}
+          {reviewCount > 0 ? `${reviewCount} ${t('reviews')}` : t('newOnPlatform')}
         </span>
       </div>
 
@@ -416,7 +459,7 @@ const AttractionDetail: React.FC = () => {
                     <svg viewBox="0 0 24 24" fill="white" width="32" height="32">
                       <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
                     </svg>
-                    <span>Show all {images.length} photos</span>
+                    <span>{t('showAllPhotos').replace('{count}', String(images.length))}</span>
                   </div>
                 )}
               </div>
@@ -442,7 +485,7 @@ const AttractionDetail: React.FC = () => {
                     {index === 2 && images.length > 5 && (
                       <div className="more-photos-overlay">
                         <span className="more-count">+{images.length - 5}</span>
-                        <span className="more-text">More photos</span>
+                        <span className="more-text">{t('morePhotos')}</span>
                       </div>
                     )}
                   </div>
@@ -461,7 +504,7 @@ const AttractionDetail: React.FC = () => {
               <svg viewBox="0 0 24 24" fill="white" width="24" height="24">
                 <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
               </svg>
-              <span>Photo gallery</span>
+              <span>{t('photoGallery')}</span>
             </div>
             <div className="modal-actions">
               <div className="photo-counter">
@@ -474,14 +517,14 @@ const AttractionDetail: React.FC = () => {
                 <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                   <path d="M18.3 5.7a1 1 0 0 0-1.4-1.4L12 9.17 7.1 4.3A1 1 0 1 0 5.7 5.7L10.59 10.6 5.7 15.49a1 1 0 1 0 1.41 1.41L12 12.01l4.89 4.89a1 1 0 0 0 1.41-1.41L13.41 10.6 18.3 5.7z"/>
                 </svg>
-                <span className="close-label">Close</span>
+                <span className="close-label">{t('closeLabel')}</span>
               </button>
             </div>
           </div>
           
           <div className="photo-modal-content">
             <button 
-              className="nav-btn prev-btn"
+              className="gallery-nav-btn gallery-prev-btn"
               onClick={(e) => {
                 e.stopPropagation();
                 setSelectedPhotoIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
@@ -501,7 +544,7 @@ const AttractionDetail: React.FC = () => {
         </div>
         
               <button
-              className="nav-btn next-btn"
+              className="gallery-nav-btn gallery-next-btn"
               onClick={(e) => {
                 e.stopPropagation();
                 setSelectedPhotoIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
@@ -562,7 +605,7 @@ const AttractionDetail: React.FC = () => {
               <line x1="9" y1="9" x2="9.01" y2="9" stroke="currentColor" strokeWidth="2"/>
               <line x1="15" y1="9" x2="15.01" y2="9" stroke="currentColor" strokeWidth="2"/>
             </svg>
-            <span>Guide language: {guideLanguages}</span>
+            <span>{t('guideLanguage')} {guideLanguages}</span>
           </div>
         )}
         
@@ -573,7 +616,7 @@ const AttractionDetail: React.FC = () => {
               <path d="M2 17l10 5 10-5" stroke="currentColor" strokeWidth="2"/>
               <path d="M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2"/>
             </svg>
-            <span>Operated by: {attraction.operatedBy}</span>
+            <span>{t('operatedBy')} {attraction.operatedBy}</span>
           </div>
         )}
         
@@ -585,20 +628,20 @@ const AttractionDetail: React.FC = () => {
               <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" strokeWidth="2"/>
               <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="2"/>
             </svg>
-            <span>Group size: {attraction.groupSize}</span>
+            <span>{t('groupSize')} {attraction.groupSize}</span>
           </div>
         )}
       </div>
 
       {/* Description Section */}
       <div className="description-section">
-        <h3>Description</h3>
-        <p>{attraction.description || attraction.shortDescription || 'No description available'}</p>
+        <h3>{t('description')}</h3>
+        <p>{attraction.description || attraction.shortDescription || t('noDescriptionAvailable')}</p>
         
         {/* Additional information from API */}
         {attraction.flags && attraction.flags.length > 0 && (
           <div className="attraction-features">
-            <h4>Features</h4>
+            <h4>{t('attractionFeatures')}</h4>
             <div className="features-list">
               {attraction.flags.slice(0, 5).map((flag: any, index: number) => (
                 <div key={index} className="feature-item">
@@ -614,7 +657,7 @@ const AttractionDetail: React.FC = () => {
         {/* Included / Not included */}
         {Array.isArray(attraction.whatsIncluded) && attraction.whatsIncluded.length > 0 && (
           <div className="additional-info">
-            <h4>What's included</h4>
+            <h4>{t('whatsIncluded')}</h4>
             <ul>
               {attraction.whatsIncluded.map((item: string, idx: number) => (
                 <li key={idx}>{item}</li>
@@ -625,7 +668,7 @@ const AttractionDetail: React.FC = () => {
         
         {Array.isArray(attraction.notIncluded) && attraction.notIncluded.length > 0 && (
           <div className="additional-info">
-            <h4>Not included</h4>
+            <h4>{t('notIncluded')}</h4>
             <ul>
               {attraction.notIncluded.map((item: string, idx: number) => (
                 <li key={idx}>{item}</li>
@@ -648,7 +691,7 @@ const AttractionDetail: React.FC = () => {
         {/* Unique Selling Points */}
         {attraction.uniqueSellingPoints && Array.isArray(attraction.uniqueSellingPoints) && attraction.uniqueSellingPoints.length > 0 && (
           <div className="additional-info">
-            <h4>Why choose this experience</h4>
+            <h4>{t('whyChooseThisExperience')}</h4>
             <ul>
               {attraction.uniqueSellingPoints.map((point: string, index: number) => (
                 <li key={index}>{point}</li>
@@ -660,7 +703,7 @@ const AttractionDetail: React.FC = () => {
         {/* Important info from additionalInfo */}
         {attraction.additionalInfo && (
           <div className="additional-info">
-            <h4>Important information</h4>
+            <h4>{t('attractionImportantInfo')}</h4>
             {String(attraction.additionalInfo)
               .split('\n')
               .filter((line: string) => line.trim().length > 0)
@@ -673,9 +716,9 @@ const AttractionDetail: React.FC = () => {
         {/* On-site Requirements */}
         {attraction.onSiteRequirements && (
           <div className="additional-info">
-            <h4>On-site requirements</h4>
+            <h4>{t('onSiteRequirements')}</h4>
             {attraction.onSiteRequirements.voucherPrintingRequired !== null && (
-              <p>Voucher printing: {attraction.onSiteRequirements.voucherPrintingRequired ? 'Required' : 'Not required'}</p>
+              <p>{t('voucherPrinting')}: {attraction.onSiteRequirements.voucherPrintingRequired ? t('voucherPrintingRequired') : t('voucherPrintingNotRequired')}</p>
             )}
           </div>
         )}
@@ -687,7 +730,7 @@ const AttractionDetail: React.FC = () => {
           (Array.isArray(attraction.addresses.arrival) && attraction.addresses.arrival.length > 0)
         ) && (
           <div className="addresses-section">
-            <h3 className="section-title">Location & Meeting Points</h3>
+            <h3 className="section-title">{t('locationAndMeetingPoints')}</h3>
             
             {/* Attraction Location (main address) */}
             {Array.isArray(attraction.addresses.attraction) && attraction.addresses.attraction.length > 0 && (
@@ -697,7 +740,7 @@ const AttractionDetail: React.FC = () => {
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
                     <circle cx="12" cy="10" r="3"/>
                   </svg>
-                  <h4>Location</h4>
+                  <h4>{t('location')}</h4>
                 </div>
                 {attraction.addresses.attraction.map((addr: any, idx: number) => (
                   <div key={idx} className="address-content">
@@ -757,7 +800,7 @@ const AttractionDetail: React.FC = () => {
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
                     <circle cx="12" cy="10" r="3"/>
                   </svg>
-                  <h4>Departure Point</h4>
+                  <h4>{t('departurePoint')}</h4>
                 </div>
                 {attraction.addresses.departure.map((addr: any, idx: number) => (
                   <div key={idx} className="address-content">
@@ -817,7 +860,7 @@ const AttractionDetail: React.FC = () => {
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
                     <circle cx="12" cy="10" r="3"/>
                   </svg>
-                  <h4>End Point</h4>
+                  <h4>{t('endPoint')}</h4>
                 </div>
                 {attraction.addresses.arrival.map((addr: any, idx: number) => (
                   <div key={idx} className="address-content">
@@ -873,7 +916,7 @@ const AttractionDetail: React.FC = () => {
         
         {attraction.cancellationPolicy && (
           <div className="additional-info">
-            <h4>Cancellation policy</h4>
+            <h4>{t('cancellationPolicy')}</h4>
             <p>{getCancellationPolicy()}</p>
           </div>
         )}
@@ -881,16 +924,16 @@ const AttractionDetail: React.FC = () => {
         {/* Recent reviews from nested structure */}
         {attraction.reviews?.reviews && Array.isArray(attraction.reviews.reviews) && attraction.reviews.reviews.length > 0 && (
           <div className="additional-info">
-            <h4>Recent reviews</h4>
+            <h4>{t('recentReviews')}</h4>
             <div className="reviews-list">
               {attraction.reviews.reviews.slice(0, 3).map((review: any, index: number) => (
                 <div key={index} className="review-item">
                   <div className="review-rating">
                     {'★'.repeat(Math.round(review.numericRating || 0))}
                   </div>
-                  <p className="review-text">"{review.content || 'No review text'}"</p>
+                  <p className="review-text">"{review.content || t('noReviewText')}"</p>
                   <p className="review-author">
-                    - {review.user?.name || 'Anonymous'}
+                    - {review.user?.name || t('anonymous')}
                     {review.user?.cc1 && ` (${review.user.cc1.toUpperCase()})`}
                   </p>
                 </div>
@@ -904,7 +947,7 @@ const AttractionDetail: React.FC = () => {
       <div className="bottom-action-bar">
         <div className="price-info">
           <span className="price-amount">{formatPrice(attraction.representativePrice)}</span>
-          <span className="price-per">per person</span>
+          <span className="price-per">{t('perPerson')}</span>
         </div>
         <button
           className="book-button"
@@ -916,7 +959,7 @@ const AttractionDetail: React.FC = () => {
             )
           }
         >
-          Book Now
+          {t('bookNow')}
         </button>
       </div>
     </div>
