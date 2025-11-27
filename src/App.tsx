@@ -2626,16 +2626,14 @@ const HomePage = () => {
             <button className="search-button" onClick={handleSearch}>Search</button>
           </div>
         )}
+
+        {/* Promo Banner for Flights - внутри search-container, по форме рамки поиска */}
+        {activeTab === 'flights' && (
+          <HomePromoBanner activeTab="flights" />
+        )}
         
         {/* Continue Search removed by request */}
       </div>
-
-
-
-      {/* Promo Banner for Flights - перед фото с городами */}
-      {activeTab === 'flights' && (
-        <HomePromoBanner activeTab="flights" />
-      )}
 
       {/* Continue your search - ровно такие же размеры как Trending destinations */}
       {activeTab === 'flights' && (() => {
