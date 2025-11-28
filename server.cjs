@@ -726,11 +726,23 @@ app.post('/api/telegram/send', express.json(), async (req, res) => {
   }
 });
 
-// Serve static files from dist
-app.use(express.static(path.join(__dirname, 'dist')));
+// Serve static files from dist (только для не-API путей)
+app.use((req, res, next) => {
+  // Если это API запрос, пропускаем статические файлы
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  // Используем express.static только для не-API путей
+  const staticMiddleware = express.static(path.join(__dirname, 'dist'));
+  staticMiddleware(req, res, next);
+});
 
-// Handle SPA routing - fallback to index.html
+// Handle SPA routing - fallback to index.html (только для не-API путей)
 app.use((req, res) => {
+  // Если это API запрос, возвращаем 404
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API endpoint not found', path: req.path });
+  }
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
