@@ -230,7 +230,7 @@
 /* Hotel Card - Desktop Booking.com style with good spacing */
 .hotel-card {
   display: grid;
-  grid-template-columns: 220px 1fr auto;
+  grid-template-columns: 220px 1fr;
   gap: var(--card-gap);
   padding: var(--card-padding);
   background: var(--card-bg);
@@ -325,9 +325,11 @@
 /* Hotel Info - Main content area */
 .hotel-info {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-direction: row;
+  gap: 20px;
   min-width: 0;
+  align-items: flex-start;
+  width: 100%;
 }
 
 .hotel-info-left {
@@ -335,6 +337,7 @@
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+  flex: 1;
 }
 
 .hotel-name {
@@ -692,15 +695,62 @@
   margin-top: 4px;
 }
 
-/* Empty right side for layout consistency */
+/* Price Section - Desktop: справа */
 .hotel-price-right {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   justify-content: flex-start;
-  gap: 4px;
-  min-width: 160px;
-  padding-top: 4px;
+  gap: 6px;
+  width: 200px;
+  flex-shrink: 0;
+  padding-left: 20px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.hotel-price-right .price-duration-info {
+  text-align: right;
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 4px;
+}
+
+.hotel-price-right .promo-badge {
+  align-self: flex-end;
+}
+
+.hotel-price-right .price-main {
+  text-align: right;
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+
+.hotel-price-right .price-per-night {
+  text-align: right;
+  font-size: 11px;
+  color: #aaa;
+}
+
+.hotel-price-right .promo-savings {
+  text-align: right;
+  font-size: 12px;
+  color: #16a249;
+  margin-top: 4px;
+}
+
+.hotel-price-right .price-note {
+  text-align: right;
+  font-size: 11px;
+  color: #999;
+  margin-top: 4px;
+}
+
+/* Price Section - Mobile: внизу (скрыта на десктопе) */
+.hotel-price-mobile {
+  display: none;
 }
 
 .see-availability-btn {
@@ -972,8 +1022,37 @@
   font-weight: 700;
 }
 
-/* Responsive adjustments */
-@media (max-width: 640px) {
+/* Responsive adjustments - только 2 варианта: широкие и узкие */
+
+/* Широкие экраны (планшеты и десктоп) - цена справа, фото фиксированной ширины */
+@media (min-width: 769px) {
+  .hotel-card {
+    grid-template-columns: 220px 1fr;
+  }
+  
+  .hotel-info {
+    flex-direction: row;
+    gap: 20px;
+  }
+  
+  .hotel-price-right {
+    display: flex;
+    width: 200px;
+  }
+  
+  .hotel-price-mobile {
+    display: none;
+  }
+  
+  .hotel-image-wrapper {
+    width: 220px;
+    height: 180px;
+    flex-shrink: 0;
+  }
+}
+
+/* Узкие экраны (только мобильные) - цена внизу, фото на всю ширину */
+@media (max-width: 768px) {
   .hotel-card {
     display: flex;
     flex-direction: column;
@@ -986,9 +1065,17 @@
     height: 200px;
   }
   
+  .hotel-info {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
   .hotel-price-right {
-    align-items: flex-start;
-    min-width: auto;
+    display: none;
+  }
+  
+  .hotel-price-mobile {
+    display: block;
   }
   
   .price-main {

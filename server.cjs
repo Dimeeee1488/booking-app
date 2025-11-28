@@ -6,8 +6,24 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Получаем API ключи из переменных окружения
-const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || 'a9723ad695msh1d68e0d7c6701c8p1d23e5jsn73f6c7159911';
+// ВНИМАНИЕ: Хардкод ключа используется только как fallback для разработки
+// В продакшене ОБЯЗАТЕЛЬНО используйте переменные окружения!
+let RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 const RAPIDAPI_HOST = process.env.RAPIDAPI_HOST || 'booking-com15.p.rapidapi.com';
+
+if (!RAPIDAPI_KEY) {
+  console.warn('⚠️  WARNING: RAPIDAPI_KEY not set in environment variables!');
+  console.warn('⚠️  Please set RAPIDAPI_KEY in your .env file or environment variables.');
+  // Fallback только для локальной разработки
+  const FALLBACK_KEY = 'a9723ad695msh1d68e0d7c6701c8p1d23e5jsn73f6c7159911';
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('⚠️  Using fallback key in development mode only.');
+    RAPIDAPI_KEY = FALLBACK_KEY;
+  } else {
+    console.error('❌ ERROR: RAPIDAPI_KEY is required in production!');
+    process.exit(1);
+  }
+}
 
 const relayUpstreamResponse = async (upstreamResponse, res) => {
   const status = upstreamResponse.status;
@@ -35,6 +51,9 @@ const handleProxyFailure = (res, label, error) => {
 };
 
 // Middleware
+// Включаем trust proxy для правильного получения IP клиента
+app.set('trust proxy', true);
+
 const corsOptions = {
   origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : [
     'http://localhost:5173', 
@@ -532,6 +551,68 @@ app.get('/api/flights/getSeatMap', async (req, res) => {
   } catch (error) {
     console.error('Seat map error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GeoIP API endpoint — получаем IP клиента из заголовков или внешнего сервиса
+app.get('/api/geo/ip', async (req, res) => {
+  try {
+    // Сначала пытаемся получить IP из заголовков (правильный способ для продакшена)
+    let clientIP = null;
+    
+    if (req.headers['x-forwarded-for']) {
+      const forwarded = req.headers['x-forwarded-for'];
+      clientIP = typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : forwarded[0];
+    } else if (req.headers['x-real-ip']) {
+      clientIP = req.headers['x-real-ip'];
+    } else if (req.headers['cf-connecting-ip']) {
+      clientIP = req.headers['cf-connecting-ip'];
+    } else if (req.connection?.remoteAddress) {
+      clientIP = req.connection.remoteAddress;
+    } else if (req.socket?.remoteAddress) {
+      clientIP = req.socket.remoteAddress;
+    } else if (req.ip) {
+      clientIP = req.ip;
+    }
+
+    // Убираем IPv6 префикс
+    if (clientIP && typeof clientIP === 'string' && clientIP.startsWith('::ffff:')) {
+      clientIP = clientIP.replace('::ffff:', '');
+    }
+
+    // Если получили localhost (127.0.0.1) - используем внешний сервис для получения IP сервера
+    // На проде это будет реальный IP, в локальной разработке - IP твоего интернета
+    if (!clientIP || clientIP === '127.0.0.1' || clientIP === '::1') {
+      try {
+        const response = await fetch('https://api.ipify.org?format=json', {
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data?.ip && typeof data.ip === 'string') {
+            clientIP = data.ip.trim();
+            console.log('GeoIP: Using external IP from ipify.org:', clientIP);
+          }
+        }
+      } catch (error) {
+        console.warn('GeoIP: ipify.org failed, using:', clientIP || 'Unknown', error.message);
+      }
+    }
+
+    const finalIP = clientIP || 'Unknown';
+    console.log('GeoIP response:', { 
+      ip: finalIP,
+      headers: {
+        'x-forwarded-for': req.headers['x-forwarded-for'],
+        'x-real-ip': req.headers['x-real-ip']
+      }
+    });
+    
+    res.json({ ip: finalIP });
+  } catch (error) {
+    console.error('GeoIP error:', error);
+    res.json({ ip: 'Unknown' });
   }
 });
 

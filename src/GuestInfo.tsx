@@ -242,12 +242,17 @@ const GuestInfo: React.FC = () => {
                   const target = e.currentTarget as HTMLImageElement;
                   target.style.display = 'none';
                   const parent = target.parentElement;
-                  if (parent) {
-                    parent.innerHTML = `
-                      <svg width="24" height="24" fill="#0071c2" viewBox="0 0 24 24">
-                        <path d="M7 14c1.66 0 3-1.34 3-3S8.66 8 7 8s-3 1.34-3 3 1.34 3 3 3zm0-4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm12-3h-8v8H3V9H1v11h2v-2h18v2h2v-7c0-2.21-1.79-4-4-4z"/>
-                      </svg>
-                    `;
+                  if (parent && !parent.querySelector('svg')) {
+                    // Безопасная замена innerHTML на createElement
+                    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    svg.setAttribute('width', '24');
+                    svg.setAttribute('height', '24');
+                    svg.setAttribute('fill', '#0071c2');
+                    svg.setAttribute('viewBox', '0 0 24 24');
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    path.setAttribute('d', 'M7 14c1.66 0 3-1.34 3-3S8.66 8 7 8s-3 1.34-3 3 1.34 3 3 3zm0-4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm12-3h-8v8H3V9H1v11h2v-2h18v2h2v-7c0-2.21-1.79-4-4-4z');
+                    svg.appendChild(path);
+                    parent.appendChild(svg);
                   }
                 }}
               />
@@ -580,46 +585,8 @@ const GuestInfo: React.FC = () => {
       {/* Footer */}
       <div className="luggage-footer">
         <div className="price-box">
-          {hotelBookingSummary && (() => {
-            const price = Number(hotelBookingSummary.totalWithTaxes || hotelBookingSummary.price || 0);
-            const currency = String(hotelBookingSummary.currency || 'EUR');
-            const promoDiscount = hotelBookingSummary.promoDiscount || null;
-            const originalPrice = hotelBookingSummary.originalPrice || hotelBookingSummary.price || 0;
-            
-            return (
-              <>
-                {promoDiscount && originalPrice > price && (
-                  <div style={{ marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: '#999', fontSize: 13, textDecoration: 'line-through' }}>
-                        {currency} {Number(originalPrice.toFixed(2))}
-                      </span>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                        <span style={{ color: '#00a884', fontSize: 13, fontWeight: 600 }}>
-                          {t('youSave') || 'You save'} {currency} {Number(promoDiscount.discountAmount.toFixed(2))}
-                        </span>
-                        <span style={{ color: '#00a884', fontSize: 11, fontWeight: 500, opacity: 0.9 }}>
-                          {promoDiscount.promoDiscountPercent || 45}% {t('discount') || 'discount'}
-                          {promoDiscount.freeNights > 0 && ` + ${promoDiscount.freeNights} ${t('nightsFree') || 'nights free'}`}
-                        </span>
-                      </div>
-                    </div>
-                    {promoDiscount.appliedPromos.length > 0 && (
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {promoDiscount.appliedPromos.map((promo: string, idx: number) => (
-                          <span key={idx} className="promo-badge-small">
-                            {promo}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="price-label">{currency} {Number(price.toFixed(2))}</div>
-                <div className="price-sub">{t('includesTaxesAndFeesLabel')}</div>
-              </>
-            );
-          })()}
+          <div className="price-label"/>
+          <div className="price-sub">{t('includesTaxesAndFeesLabel')}</div>
         </div>
         <button 
           className="next-button" 

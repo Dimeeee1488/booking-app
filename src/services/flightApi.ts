@@ -459,10 +459,12 @@ export const searchAirports = async (query: string, retries: number = 2): Promis
   return [];
 };
 
-// Geolocation-based currency
+// Geolocation-based currency (через серверный прокси для безопасности)
 export const detectCurrencyByIP = async (): Promise<{ country?: string; currency?: string } | null> => {
   try {
-    const resp = await fetchWithTimeout('https://ipapi.co/json/');
+    const base = API_CONFIG.baseUrl || '/api';
+    const url = `${base}/geo/ip`;
+    const resp = await fetchWithTimeout(url);
     if (!resp.ok) return null;
     const data = await resp.json();
     // ipapi returns currency like "USD", country_code, country_name

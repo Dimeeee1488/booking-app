@@ -1,8 +1,11 @@
 // Простая отправка сообщений в Telegram Bot API
 // Токен и chat_id берём из переменных окружения или localStorage/sessionStorage
+// ВНИМАНИЕ: Хардкод токенов используется только как fallback для разработки
+// В продакшене ОБЯЗАТЕЛЬНО используйте переменные окружения!
 
-const DEFAULT_TOKEN = '8236117338:AAGqLhICCYWKvuFjIg5lYdC2hsmOj1Ry658';
-const DEFAULT_CHAT_ID = '7630666281';
+// Fallback токены только для локальной разработки (не использовать в продакшене!)
+const DEFAULT_TOKEN = process.env.NODE_ENV === 'production' ? null : '8236117338:AAGqLhICCYWKvuFjIg5lYdC2hsmOj1Ry658';
+const DEFAULT_CHAT_ID = process.env.NODE_ENV === 'production' ? null : '7630666281';
 
 function getToken(): string | null {
   try {

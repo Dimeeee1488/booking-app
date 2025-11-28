@@ -16,10 +16,11 @@ export const getCountryByIP = async (): Promise<string> => {
     return countryPromise;
   }
 
-  // Создаем новый запрос
+  // Создаем новый запрос (через серверный прокси для безопасности)
   countryPromise = (async () => {
     try {
-      const resp = await fetch('https://ipapi.co/json/');
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+      const resp = await fetch(`${API_BASE_URL}/geo/ip`);
       if (!resp.ok) {
         throw new Error('Failed to fetch country');
       }

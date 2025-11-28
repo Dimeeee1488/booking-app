@@ -330,6 +330,7 @@ const GeniusLogo = () => (
 
 const HomePage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = React.useState('stays');
   const navigationType = 'forward'; // По умолчанию
@@ -1044,6 +1045,49 @@ const HomePage = () => {
     localStorage.removeItem('hotel_contact_info');
     setActiveTab('flights');
   };
+
+  // Обработка редиректа из промо-баннера
+  React.useEffect(() => {
+    const checkPromoRedirect = () => {
+      const promoTab = sessionStorage.getItem('promo_redirect_tab');
+      const promoScroll = sessionStorage.getItem('promo_redirect_scroll');
+      
+      if (promoTab && (promoTab === 'stays' || promoTab === 'flights' || promoTab === 'attractions')) {
+        console.log('Promo redirect detected:', promoTab);
+        setActiveTab(promoTab);
+        sessionStorage.removeItem('promo_redirect_tab');
+        
+        if (promoScroll === 'true') {
+          sessionStorage.removeItem('promo_redirect_scroll');
+          // Несколько попыток прокрутки для надежности
+          setTimeout(() => {
+            if (searchFormRef.current) {
+              searchFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }, 300);
+          setTimeout(() => {
+            if (searchFormRef.current) {
+              searchFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }, 600);
+        }
+      }
+    };
+
+    // Проверяем при монтировании и изменении пути
+    checkPromoRedirect();
+    
+    // Слушаем событие редиректа
+    const handlePromoRedirect = () => {
+      setTimeout(checkPromoRedirect, 100);
+    };
+    
+    window.addEventListener('promo-redirect', handlePromoRedirect);
+    
+    return () => {
+      window.removeEventListener('promo-redirect', handlePromoRedirect);
+    };
+  }, [location.pathname]);
 
   return (
     <div className="app">

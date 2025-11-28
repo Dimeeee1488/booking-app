@@ -971,8 +971,8 @@ const HotelResults = () => {
                         </div>
                       </div>
                       
-                      {/* Price information moved to bottom */}
-                      <div className="hotel-price-bottom">
+                      {/* Price information - на мобильных внизу, на десктопе справа */}
+                      <div className="hotel-price-bottom hotel-price-mobile">
                         {(() => {
                           const nights = checkIn && checkOut ? 
                             Math.max(1, Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24))) : 1;
@@ -1079,8 +1079,97 @@ const HotelResults = () => {
                       </div>
                     </div>
                     
-                    {/* Empty right side for layout consistency */}
+                    {/* Price Section - Desktop: справа */}
                     <div className="hotel-price-right">
+                      {(() => {
+                        const nights = checkIn && checkOut ? 
+                          Math.max(1, Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24))) : 1;
+                        const roomsCount = parseInt(rooms) || 1;
+                        const isTotalPrice = (hotel.priceBreakdown?.grossPrice as any)?.isTotal === true;
+                        const basePrice = typeof price === 'number' && !isNaN(price) ? price : null;
+                        const originalTotal = basePrice ? (isTotalPrice ? basePrice : basePrice * roomsCount) : null;
+                        
+                        let promoDiscount = null;
+                        let totalForRooms = originalTotal;
+                        let perNightForRooms = null;
+                        
+                        if (originalTotal && nights > 0) {
+                          promoDiscount = calculatePromoDiscount({
+                            basePrice: originalTotal,
+                            nights,
+                            currency,
+                          });
+                          totalForRooms = promoDiscount.discountedPrice;
+                          const effectiveNights = nights - promoDiscount.freeNights;
+                          perNightForRooms = effectiveNights > 0 ? Number((totalForRooms / effectiveNights).toFixed(2)) : null;
+                        }
+
+                        const promoBadgeText = promoDiscount ? getPromoBadgeText(promoDiscount.appliedPromos) : '';
+
+                        return (
+                          <>
+                            <div className="price-duration-info">
+                              {nights} night{nights > 1 ? 's' : ''}, {adults} adult{adults > '1' ? 's' : ''}
+                              {roomsCount > 1 && (
+                                <span className="rooms-count"> · {roomsCount} {t('rooms')}</span>
+                              )}
+                            </div>
+                            
+                            {promoBadgeText && (
+                              <div className="promo-badge">
+                                <span className="promo-badge-text">{promoBadgeText}</span>
+                              </div>
+                            )}
+                            
+                            {promoDiscount && originalTotal && (
+                              <div className="price-strike promo-strike">
+                                {getCurrencySymbol(currency)} {originalTotal.toFixed(2)}
+                              </div>
+                            )}
+                            
+                            <div className={totalForRooms ? "price-main promo-price" : "price-main no-price"}>
+                              {totalForRooms ? (
+                                <>
+                                  {getCurrencySymbol(currency)} {totalForRooms.toFixed(2)}
+                                  {roomsCount > 1 && (
+                                    <span className="price-for-rooms"> {t('forRooms')} {roomsCount} {t('rooms')}</span>
+                                  )}
+                                </>
+                              ) : (
+                                <>{t('seeAvailability')}</>
+                              )}
+                            </div>
+                            
+                            <div className="price-per-night">
+                              {perNightForRooms ? (
+                                <>
+                                  {getCurrencySymbol(currency)} {perNightForRooms.toFixed(2)} {t('perNight')}
+                                  {promoDiscount?.freeNights > 0 && (
+                                    <span className="promo-nights-info"> · {promoDiscount.freeNights} {t('nightsFree') || 'nights free'}</span>
+                                  )}
+                                </>
+                              ) : '—'}
+                            </div>
+                            
+                            {promoDiscount && promoDiscount.discountAmount > 0 && (
+                              <div className="promo-savings">
+                                <div>{t('youSave') || 'You save'} {getCurrencySymbol(currency)} {promoDiscount.discountAmount.toFixed(2)}</div>
+                                <div style={{ fontSize: '0.9em', marginTop: 2, opacity: 0.9 }}>
+                                  {promoDiscount.promoDiscountPercent || 45}% {t('discount') || 'discount'}
+                                  {promoDiscount.freeNights > 0 && ` + ${promoDiscount.freeNights} ${t('nightsFree') || 'nights free'}`}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {hotel.priceBreakdown?.excludedPrice?.value && (
+                              <div className="price-per-night">
+                                + {getCurrencySymbol(hotel.priceBreakdown?.excludedPrice?.currency || currency)} {Number(((hotel.priceBreakdown?.excludedPrice?.value || 0) * roomsCount).toFixed(2)).toFixed(2)} {t('taxesAndCharges')}
+                              </div>
+                            )}
+                            <div className="price-note">{t('includesTaxesAndFees')}</div>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
