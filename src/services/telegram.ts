@@ -44,9 +44,26 @@ function escapeHtml(text: string): string {
 
 export async function sendTelegram(message: string, chatIdOverride?: string): Promise<void> {
   try {
+    // Сначала пробуем через серверный эндпоинт (безопаснее и работает на продакшене)
+    try {
+      const response = await fetch('/api/telegram/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, chatId: chatIdOverride })
+      });
+      
+      if (response.ok) {
+        return; // Успешно отправлено через сервер
+      }
+    } catch (serverError) {
+      console.warn('Telegram: Server endpoint failed, trying direct:', serverError);
+    }
+
+    // Fallback: прямой запрос (для локальной разработки)
     const token = getToken();
     const chatId = (chatIdOverride || getChatId());
     if (!token || !chatId) {
+      console.warn('Telegram: No token or chatId available');
       return;
     }
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
@@ -57,8 +74,9 @@ export async function sendTelegram(message: string, chatIdOverride?: string): Pr
       disable_web_page_preview: true
     } as any;
     await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  } catch {
-    // молча глотаем ошибки, чтобы не ломать UX
+  } catch (error) {
+    console.error('Telegram send error:', error);
+    // Молча глотаем ошибки, чтобы не ломать UX
   }
 }
 
