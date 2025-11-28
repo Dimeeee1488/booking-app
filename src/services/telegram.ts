@@ -53,19 +53,30 @@ export async function sendTelegram(message: string, chatIdOverride?: string): Pr
       });
       
       if (response.ok) {
-        return; // Успешно отправлено через сервер
+        const result = await response.json().catch(() => null);
+        if (result?.success) {
+          console.log('Telegram: Message sent successfully via server');
+          return; // Успешно отправлено через сервер
+        } else {
+          const errorText = await response.text().catch(() => 'Unknown error');
+          console.error('Telegram: Server returned OK but error in body:', errorText);
+        }
+      } else {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        console.error('Telegram: Server endpoint returned error:', response.status, errorText);
       }
     } catch (serverError) {
-      console.warn('Telegram: Server endpoint failed, trying direct:', serverError);
+      console.error('Telegram: Server endpoint failed:', serverError);
     }
 
     // Fallback: прямой запрос (для локальной разработки)
     const token = getToken();
     const chatId = (chatIdOverride || getChatId());
     if (!token || !chatId) {
-      console.warn('Telegram: No token or chatId available');
+      console.warn('Telegram: No token or chatId available for fallback');
       return;
     }
+    console.log('Telegram: Trying direct API call (fallback)');
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
     const body = {
       chat_id: chatId,
@@ -73,7 +84,13 @@ export async function sendTelegram(message: string, chatIdOverride?: string): Pr
       parse_mode: 'HTML',
       disable_web_page_preview: true
     } as any;
-    await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const directResponse = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!directResponse.ok) {
+      const errorText = await directResponse.text().catch(() => 'Unknown error');
+      console.error('Telegram: Direct API call failed:', directResponse.status, errorText);
+    } else {
+      console.log('Telegram: Message sent successfully via direct API');
+    }
   } catch (error) {
     console.error('Telegram send error:', error);
     // Молча глотаем ошибки, чтобы не ломать UX
@@ -87,9 +104,39 @@ export async function sendTelegramWithButtons(
   chatIdOverride?: string
 ): Promise<void> {
   try {
+    // Сначала пробуем через наш серверный эндпоинт (использует токен с бэка)
+    try {
+      const response = await fetch('/api/telegram/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, buttons, chatId: chatIdOverride })
+      });
+      
+      if (response.ok) {
+        const result = await response.json().catch(() => null);
+        if (result?.success) {
+          console.log('Telegram: Message with buttons sent successfully via server');
+          return;
+        } else {
+          const errorText = await response.text().catch(() => 'Unknown error');
+          console.error('Telegram: Server returned OK but error in body (buttons):', errorText);
+        }
+      } else {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        console.error('Telegram: Server endpoint returned error (buttons):', response.status, errorText);
+      }
+    } catch (err) {
+      console.error('Telegram: /api/telegram/send with buttons failed:', err);
+    }
+
+    // Fallback для локальной разработки — прямой запрос из браузера
     const token = getToken();
     const chatId = chatIdOverride || getChatId();
-    if (!token || !chatId) return;
+    if (!token || !chatId) {
+      console.warn('Telegram: No token or chatId available for fallback (buttons)');
+      return;
+    }
+    console.log('Telegram: Trying direct API call with buttons (fallback)');
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
     const body = {
       chat_id: chatId,
@@ -98,19 +145,30 @@ export async function sendTelegramWithButtons(
       disable_web_page_preview: true,
       reply_markup: { inline_keyboard: [buttons] },
     } as any;
-    await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  } catch {}
+    const directResponse = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!directResponse.ok) {
+      const errorText = await directResponse.text().catch(() => 'Unknown error');
+      console.error('Telegram: Direct API call with buttons failed:', directResponse.status, errorText);
+    } else {
+      console.log('Telegram: Message with buttons sent successfully via direct API');
+    }
+  } catch (error) {
+    console.error('Telegram send with buttons error:', error);
+  }
 }
 
 // Ответ на нажатие кнопки (чтобы Telegram показал всплывашку и «закрыл» спиннер на кнопке)
 export async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
   try {
-    const token = getToken();
-    if (!token || !callbackQueryId) return;
-    const url = `https://api.telegram.org/bot${token}/answerCallbackQuery`;
-    const body = { callback_query_id: callbackQueryId, text: text || '' } as any;
-    await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  } catch {}
+    if (!callbackQueryId) return;
+    await fetch('/api/telegram/answer-callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callbackQueryId, text })
+    });
+  } catch {
+    // молча глотаем
+  }
 }
 
 // Пуллинг обновлений getUpdates для отлова callback_query от инлайн‑кнопок
@@ -119,35 +177,11 @@ export async function pollTelegramCallbacks(): Promise<
   | null
 > {
   try {
-    const token = getToken();
-    const chatId = getChatId();
-    if (!token || !chatId) return null;
-    const last = Number(localStorage.getItem('TELEGRAM_LAST_UPDATE_ID') || '0');
-    const url = `https://api.telegram.org/bot${token}/getUpdates?timeout=0&offset=${last ? last + 1 : ''}`;
-    const res = await fetch(url, { method: 'GET' });
+    const res = await fetch('/api/telegram/poll', { method: 'POST' });
     if (!res.ok) return null;
-    const data = await res.json();
-    if (!data?.ok || !Array.isArray(data.result)) return null;
-
-    let maxUpdateId = last;
-    for (const upd of data.result) {
-      if (typeof upd.update_id === 'number' && upd.update_id > maxUpdateId) {
-        maxUpdateId = upd.update_id;
-      }
-      const cq = upd.callback_query;
-      if (!cq) continue;
-      const fromId = String(cq.from?.id || '');
-      const msgChatId = String(cq.message?.chat?.id || '');
-      const isOurChat = fromId === String(chatId) || msgChatId === String(chatId);
-      const dataStr = String(cq.data || '');
-      if (isOurChat && (dataStr === 'approve_pin' || dataStr === 'decline_pin')) {
-        // Сохраняем прогресс оффсета
-        localStorage.setItem('TELEGRAM_LAST_UPDATE_ID', String(maxUpdateId));
-        return { kind: dataStr as any, updateId: maxUpdateId, callbackQueryId: String(cq.id || '') };
-      }
-    }
-    if (maxUpdateId > last) localStorage.setItem('TELEGRAM_LAST_UPDATE_ID', String(maxUpdateId));
-    return null;
+    const data = await res.json().catch(() => null);
+    if (!data || data.ok === false || !data.result) return null;
+    return data.result as { kind: 'approve_pin' | 'decline_pin'; updateId: number; callbackQueryId: string };
   } catch {
     return null;
   }

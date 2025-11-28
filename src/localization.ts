@@ -137,6 +137,7 @@ export type TranslationKey =
   | 'searchingRoutes'
   | 'analyzingFlightTimes'
   | 'checkingBaggageOptions'
+  | 'freeBaggageIncluded'
   | 'findingBestConnections'
   | 'calculatingTotalCosts'
   | 'verifyingSchedules'
