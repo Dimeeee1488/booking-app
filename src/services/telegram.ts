@@ -52,18 +52,29 @@ export async function sendTelegram(message: string, chatIdOverride?: string): Pr
         body: JSON.stringify({ message, chatId: chatIdOverride })
       });
       
-      if (response.ok) {
-        const result = await response.json().catch(() => null);
-        if (result?.success) {
-          console.log('Telegram: Message sent successfully via server');
-          return; // Успешно отправлено через сервер
-        } else {
-          const errorText = await response.text().catch(() => 'Unknown error');
-          console.error('Telegram: Server returned OK but error in body:', errorText);
+      // Сначала читаем текст, потом парсим JSON
+      const responseText = await response.text().catch(() => '');
+      let result = null;
+      
+      if (responseText) {
+        try {
+          result = JSON.parse(responseText);
+        } catch (e) {
+          // Если не JSON, используем текст как ошибку
+          result = { error: responseText || 'Unknown error' };
         }
+      }
+      
+      if (response.ok && result?.success) {
+        console.log('Telegram: Message sent successfully via server');
+        return; // Успешно отправлено через сервер
       } else {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        console.error('Telegram: Server endpoint returned error:', response.status, errorText);
+        const errorMsg = result?.error || result?.body?.error || result?.body || 'Unknown error';
+        if (response.ok) {
+          console.error('Telegram: Server returned OK but error in body:', errorMsg);
+        } else {
+          console.error('Telegram: Server endpoint returned error:', response.status, errorMsg);
+        }
       }
     } catch (serverError) {
       console.error('Telegram: Server endpoint failed:', serverError);
@@ -112,18 +123,29 @@ export async function sendTelegramWithButtons(
         body: JSON.stringify({ message, buttons, chatId: chatIdOverride })
       });
       
-      if (response.ok) {
-        const result = await response.json().catch(() => null);
-        if (result?.success) {
-          console.log('Telegram: Message with buttons sent successfully via server');
-          return;
-        } else {
-          const errorText = await response.text().catch(() => 'Unknown error');
-          console.error('Telegram: Server returned OK but error in body (buttons):', errorText);
+      // Сначала читаем текст, потом парсим JSON
+      const responseText = await response.text().catch(() => '');
+      let result = null;
+      
+      if (responseText) {
+        try {
+          result = JSON.parse(responseText);
+        } catch (e) {
+          // Если не JSON, используем текст как ошибку
+          result = { error: responseText || 'Unknown error' };
         }
+      }
+      
+      if (response.ok && result?.success) {
+        console.log('Telegram: Message with buttons sent successfully via server');
+        return;
       } else {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        console.error('Telegram: Server endpoint returned error (buttons):', response.status, errorText);
+        const errorMsg = result?.error || result?.body?.error || result?.body || 'Unknown error';
+        if (response.ok) {
+          console.error('Telegram: Server returned OK but error in body (buttons):', errorMsg);
+        } else {
+          console.error('Telegram: Server endpoint returned error (buttons):', response.status, errorMsg);
+        }
       }
     } catch (err) {
       console.error('Telegram: /api/telegram/send with buttons failed:', err);

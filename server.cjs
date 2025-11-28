@@ -679,18 +679,37 @@ app.post('/api/telegram/send', express.json(), async (req, res) => {
       data = rawText ? JSON.parse(rawText) : null;
     } catch (parseErr) {
       console.error('Telegram API JSON parse error:', parseErr, 'raw:', rawText?.slice(0, 200));
+      // Если не удалось распарсить JSON, возвращаем ошибку
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to parse Telegram API response', 
+        details: rawText?.slice(0, 200) || 'Empty response'
+      });
     }
 
     // HTTP-уровень: ошибка
     if (!response.ok) {
-      console.error('Telegram API HTTP error:', response.status, rawText?.slice(0, 200));
-      return res.status(500).json({ error: 'Failed to send Telegram message (HTTP)', status: response.status, body: data || rawText });
+      const errorDetails = data?.description || data?.error_code || rawText?.slice(0, 200) || 'Unknown error';
+      console.error('Telegram API HTTP error:', response.status, errorDetails);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to send Telegram message (HTTP)', 
+        status: response.status, 
+        details: errorDetails,
+        body: data
+      });
     }
 
     // Telegram-уровень: ok=false
     if (!data || data.ok === false) {
-      console.error('Telegram API logical error:', data || rawText?.slice(0, 200));
-      return res.status(500).json({ error: 'Failed to send Telegram message (Telegram)', body: data || rawText });
+      const errorDetails = data?.description || data?.error_code || 'Telegram API returned ok=false';
+      console.error('Telegram API logical error:', errorDetails, 'full response:', JSON.stringify(data).slice(0, 200));
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to send Telegram message (Telegram)', 
+        details: errorDetails,
+        body: data
+      });
     }
 
     console.log('Telegram message sent successfully:', {
